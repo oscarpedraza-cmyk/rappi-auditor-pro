@@ -2210,32 +2210,39 @@ INSTRUCCIONES
       }
     }
 
-    // 3. AI fallback — Gemini 2.0 Flash
+    // 3. AI fallback — Groq (Llama 3.3 70B)
     const ctrl = new AbortController();
     try {
       const context = buildContext();
-      const geminiKey = import.meta.env.VITE_GEMINI_API_KEY ?? "";
+      const groqKey = import.meta.env.VITE_GROQ_API_KEY ?? "";
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`,
+        `https://api.groq.com/openai/v1/chat/completions`,
         {
           method: "POST",
           signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${groqKey}`,
+          },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: context }] },
-            contents: [{ role: "user", parts: [{ text: q }] }],
-            generationConfig: { maxOutputTokens: 1000, temperature: 0.3 },
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              { role: "system", content: context },
+              { role: "user", content: q },
+            ],
+            max_tokens: 1000,
+            temperature: 0.3,
           }),
         }
       );
       const data = await response.json();
-      // Gemini API error (bad key, quota, etc.)
+      // Groq API error (bad key, quota, etc.)
       if (data.error) {
-        setResult(`⚠️ Error Gemini API: ${data.error.message ?? JSON.stringify(data.error)}\n\nVerifica que la variable VITE_GEMINI_API_KEY esté configurada y que reiniciaste el servidor (npm run dev).`);
+        setResult(`⚠️ Error Groq API: ${data.error.message ?? JSON.stringify(data.error)}\n\nVerifica que la variable VITE_GROQ_API_KEY esté configurada en Render.`);
         setLoading(false);
         return;
       }
-      let text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      let text = data.choices?.[0]?.message?.content ?? "";
 
       // Intelligent fallback — never leave farmer with a blank/error
       if (!text || text.length < 20) {
