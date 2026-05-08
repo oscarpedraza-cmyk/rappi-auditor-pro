@@ -2229,6 +2229,12 @@ INSTRUCCIONES
         }
       );
       const data = await response.json();
+      // Gemini API error (bad key, quota, etc.)
+      if (data.error) {
+        setResult(`⚠️ Error Gemini API: ${data.error.message ?? JSON.stringify(data.error)}\n\nVerifica que la variable VITE_GEMINI_API_KEY esté configurada y que reiniciaste el servidor (npm run dev).`);
+        setLoading(false);
+        return;
+      }
       let text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
       // Intelligent fallback — never leave farmer with a blank/error
@@ -2255,6 +2261,7 @@ INSTRUCCIONES
       logQueryToSheets({ aliado: paidlot.meta.tienda, pais: country, pregunta: q, respuesta: text });
 
     } catch (err) {
+      console.error("[Gemini]", err);
       const topGroup = [...(paidlot.groups ?? [])].sort((a,b) => b.total - a.total)[0];
       const fallback = topGroup
         ? "El análisis automático muestra que el mayor movimiento del período está en " +
