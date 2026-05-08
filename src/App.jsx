@@ -3166,48 +3166,6 @@ export default function RappiPaidlotAuditorPro() {
     setLoading(false);
   }, [paidlots]);
 
-  const handleExportPDF = useCallback(async () => {
-    if (!activePaidlot) return;
-    const country = activeCountry;
-    const cfg = CONFIG.countries[country] ?? CONFIG.countries["No detectado"];
-    const fmtV = (v) => { try { return new Intl.NumberFormat(cfg.locale, { style: "currency", currency: cfg.currency, maximumFractionDigits: 0 }).format(v ?? 0); } catch { return String(v ?? 0); } };
-
-    setPdfLoading(true);
-    let aiInsights = "";
-    try {
-      const groqKey = import.meta.env.VITE_GROQ_API_KEY ?? "";
-      // Build context for all selected paidlots
-      const periodsData = selectedPaidlots.map(p => {
-        const kpi = p.topKpis;
-        const tax = kpi.impuestosTotalExacto ?? kpi.totalImpuestos ?? 0;
-        return `Período: ${p.resumen.inicio} → ${p.resumen.fin} | Ventas: ${fmtV(kpi.ventaBruta)} | Total a Pagar: ${fmtV(kpi.totalAPagar ?? kpi.neto)} | Comisión: ${fmtV(kpi.comision)} | Impuestos: ${fmtV(tax)} (${kpi.ventaBruta > 0 ? ((tax/kpi.ventaBruta)*100).toFixed(1) : 0}%) | Tarifa efectiva: ${(kpi.effectiveFee*100).toFixed(1)}% | DAR activo: ${kpi.hasDar ? "Sí (" + fmtV(kpi.darInversionTotal) + ")" : "No"} | RappiAds: ${fmtV(kpi.cuotaRappiAds ?? 0)} | Compensaciones: ${fmtV(kpi.compensaciones)} | Órdenes: ${p.ordersTable.length}`;
-      }).join("\n");
-
-      const prompt = selectedPaidlots.length > 1
-        ? `Analiza el desempeño financiero de ${selectedPaidlots[0].meta.tienda} en ${country} durante ${selectedPaidlots.length} períodos:\n\n${periodsData}\n\nEntrega:\n1. Resumen ejecutivo en 3 oraciones sobre el desempeño general y tendencia.\n2. 3 insights clave sobre cambios entre períodos.\n3. 2 acciones concretas prioritarias basadas en los datos.\n\nResponde en español, sin markdown, sin listas con guiones. Máximo 250 palabras.`
-        : `Analiza el paidlot de ${selectedPaidlots[0].meta.tienda} en ${country}:\n\n${periodsData}\n\nEntrega:\n1. Resumen ejecutivo en 2 oraciones.\n2. 2 insights clave del período.\n3. 1 acción concreta prioritaria.\n\nResponde en español, sin markdown. Máximo 150 palabras.`;
-
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            { role: "system", content: "Eres un analista financiero experto en aliados de Rappi en Latinoamérica. Responde siempre en español, de forma concisa y orientada a la acción." },
-            { role: "user", content: prompt }
-          ],
-          max_tokens: 400, temperature: 0.4,
-        }),
-      });
-      const data = await res.json();
-      aiInsights = data.choices?.[0]?.message?.content ?? "";
-    } catch (err) {
-      aiInsights = "";
-    }
-    setPdfLoading(false);
-    exportPDF(activePaidlot, country, aiInsights, selectedPaidlots);
-  }, [activePaidlot, activeCountry, selectedPaidlots]);
-
   const confirmCountry = useCallback(() => {
     if (!countryModal) return;
     setPaidlots(prev => prev.map((p, i) => i === countryModal.idx ? { ...p, detection: { country: tempCountry, confidence: "manual" } } : p));
@@ -3253,6 +3211,35 @@ export default function RappiPaidlotAuditorPro() {
   const activeCfg = CONFIG.countries[activeCountry] ?? CONFIG.countries["No detectado"];
   const activeGroups = activePaidlot?.groups ?? [];
   const currentGroupKey = activeGroupKey ?? activeGroups[0]?.key;
+
+  const handleExportPDF = useCallback(async () => {
+    if (!activePaidlot) return;
+    const country = activeCountry;
+    const cfg = CONFIG.countries[country] ?? CONFIG.countries["No detectado"];
+    const fmtV = (v) => { try { return new Intl.NumberFormat(cfg.locale, { style: "currency", currency: cfg.currency, maximumFractionDigits: 0 }).format(v ?? 0); } catch { return String(v ?? 0); } };
+    setPdfLoading(true);
+    let aiInsights = "";
+    try {
+      const groqKey = import.meta.env.VITE_GROQ_API_KEY ?? "";
+      const periodsData = selectedPaidlots.map(p => {
+        const kpi = p.topKpis;
+        const tax = kpi.impuestosTotalExacto ?? kpi.totalImpuestos ?? 0;
+        return `Período: ${p.resumen.inicio}→${p.resumen.fin} | Ventas: ${fmtV(kpi.ventaBruta)} | Neto: ${fmtV(kpi.totalAPagar ?? kpi.neto)} | Comisión: ${fmtV(kpi.comision)} | Impuestos: ${fmtV(tax)} (${kpi.ventaBruta > 0 ? ((tax/kpi.ventaBruta)*100).toFixed(1) : 0}%) | TarifaEfectiva: ${(kpi.effectiveFee*100).toFixed(1)}% | DAR: ${kpi.hasDar ? "Sí "+fmtV(kpi.darInversionTotal) : "No"} | ADS: ${fmtV(kpi.cuotaRappiAds??0)} | Órdenes: ${p.ordersTable.length}`;
+      }).join("\n");
+      const prompt = selectedPaidlots.length > 1
+        ? `Analiza ${selectedPaidlots.length} períodos de ${selectedPaidlots[0].meta.tienda} en ${country}:\n${periodsData}\n\nDa: 1) Resumen ejecutivo (3 oraciones). 2) 3 insights de cambios entre períodos. 3) 2 acciones prioritarias. En español, sin markdown. Máx 200 palabras.`
+        : `Analiza el paidlot de ${selectedPaidlots[0].meta.tienda} en ${country}:\n${periodsData}\n\nDa: 1) Resumen (2 oraciones). 2) 2 insights. 3) 1 acción prioritaria. En español, sin markdown. Máx 120 palabras.`;
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: "Analista financiero de aliados Rappi. Responde en español, conciso." }, { role: "user", content: prompt }], max_tokens: 300, temperature: 0.4 }),
+      });
+      const data = await res.json();
+      aiInsights = data.choices?.[0]?.message?.content ?? "";
+    } catch { aiInsights = ""; }
+    setPdfLoading(false);
+    exportPDF(activePaidlot, country, aiInsights, selectedPaidlots);
+  }, [activePaidlot, activeCountry, selectedPaidlots]);
   const currentGroupCfg = CONFIG.groups.find(g => g.key === currentGroupKey);
   const currentGroupData = activePaidlot?.groups.find(g => g.key === currentGroupKey);
 
