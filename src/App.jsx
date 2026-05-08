@@ -2346,17 +2346,17 @@ const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection
     const cty = country;
     const darConfig = DAR_CONFIG[country] ?? DAR_CONFIG["No detectado"];
 
-    const ordersText = p.ordersTable.map(o =>
-      `  Orden ${o.ordenId}: fecha=${o.fecha}, venta_bruta=${fmt(o.ventaBruta, cty)}, comision=${fmt(Math.abs(o.comision), cty)}, neto=${fmt(o.neto, cty)}, DAR=${fmt(o.darTotal, cty)}, metodo_pago=${o.metodoPago}`
+    const ordersText = p.ordersTable.slice(0, 25).map(o =>
+      `  ${o.ordenId}|${o.fecha}|vb=${fmt(o.ventaBruta, cty)}|neto=${fmt(o.neto, cty)}|DAR=${fmt(o.darTotal, cty)}`
+    ).join("\n") + (p.ordersTable.length > 25 ? `\n  ... y ${p.ordersTable.length - 25} órdenes más` : "");
+    const compsText = p.compRows.slice(0, 10).map(c =>
+      `  ${c.orderId}|${c.fecha}|${c.razon}|${fmt(c.monto, cty)}`
     ).join("\n");
-    const compsText = p.compRows.map(c =>
-      `  Compensacion orden ${c.orderId}: fecha=${c.fecha}, razon=${c.razon}, monto=${fmt(c.monto, cty)}, comentario=${c.comentario}`
+    const ajustesText = p.ajustesRows.slice(0, 10).map(a =>
+      `  ${a.ordenId}|${a.fecha}|${a.razon}|ajuste=${fmt(a.ajuste, cty)}`
     ).join("\n");
-    const ajustesText = p.ajustesRows.map(a =>
-      `  Ajuste orden ${a.ordenId}: fecha=${a.fecha}, razon=${a.razon}, ajuste=${fmt(a.ajuste, cty)}, deuda=${fmt(a.deuda, cty)}`
-    ).join("\n");
-    const extrasText = p.extrasTable.map(e =>
-      `  Extra ${e.ordenId}: fecha=${e.fecha}, tipo=${e.tipo}, monto=${fmt(e.ventaBruta, cty)}`
+    const extrasText = p.extrasTable.slice(0, 5).map(e =>
+      `  ${e.ordenId}|${e.fecha}|${e.tipo}|${fmt(e.ventaBruta, cty)}`
     ).join("\n");
 
     return `PAIDLOT DE RAPPI — CONTEXTO COMPLETO PARA RESOLVER DUDAS DEL ALIADO
