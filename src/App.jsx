@@ -2346,9 +2346,9 @@ const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection
     const cty = country;
     const darConfig = DAR_CONFIG[country] ?? DAR_CONFIG["No detectado"];
 
-    const ordersText = p.ordersTable.slice(0, 25).map(o =>
+    const ordersText = p.ordersTable.slice(0, 15).map(o =>
       `  ${o.ordenId}|${o.fecha}|vb=${fmt(o.ventaBruta, cty)}|neto=${fmt(o.neto, cty)}|DAR=${fmt(o.darTotal, cty)}`
-    ).join("\n") + (p.ordersTable.length > 25 ? `\n  ... y ${p.ordersTable.length - 25} órdenes más` : "");
+    ).join("\n") + (p.ordersTable.length > 15 ? `\n  (+${p.ordersTable.length - 15} más)` : "");
     const compsText = p.compRows.slice(0, 10).map(c =>
       `  ${c.orderId}|${c.fecha}|${c.razon}|${fmt(c.monto, cty)}`
     ).join("\n");
@@ -2359,71 +2359,21 @@ const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection
       `  ${e.ordenId}|${e.fecha}|${e.tipo}|${fmt(e.ventaBruta, cty)}`
     ).join("\n");
 
-    return `PAIDLOT DE RAPPI — CONTEXTO COMPLETO PARA RESOLVER DUDAS DEL ALIADO
+    return `Eres experto contable de Rappi. Responde en español, máximo 3 párrafos, sin tecnicismos. Usa los datos del paidlot para responder.
 
-DATOS GENERALES
-  Aliado: ${p.meta.tienda}
-  ID Tienda: ${p.meta.tiendaId}
-  Paidlot ID: ${p.meta.paidlotId}
-  País: ${country}
-  Período: ${p.resumen.inicio} al ${p.resumen.fin}
-  Fecha de pago contrato: ${p.resumen.fechaPago}
+PAIDLOT: ${p.meta.tienda} | ${country} | ${p.resumen.inicio}→${p.resumen.fin}
+KPIs: VentaBruta=${fmt(kpi.ventaBruta,cty)} | TotalPagar=${fmt(kpi.totalAPagar??kpi.neto,cty)} | Comision=${fmt(kpi.comision,cty)} | Impuestos=${fmt(kpi.impuestosTotalExacto??kpi.totalImpuestos??0,cty)} | TarifaEfectiva=${fmtPct(kpi.effectiveFee)} | DAR=${kpi.hasDar?"SI "+fmt(kpi.darInversionTotal,cty):"NO"} | ADS=${fmt(kpi.cuotaRappiAds??0,cty)} | ADSvencida=${fmt(kpi.rappiAdsCollection??0,cty)} | Compensaciones=${fmt(kpi.compensaciones,cty)} | Ajustes=${fmt(kpi.ajustesTotal,cty)} | Ordenes=${kpi.ordenes}
+DAR: organismo=${darConfig.organismo} | plazoNC=${darConfig.plazoNC}
+Impuestos detectados: ${(kpi.impuestosPorRegla??[]).filter(r=>r.value>0).map(r=>`${r.name}=${fmt(r.value,cty)}`).join(", ")||"ninguno"}
 
-KPIs DEL PERÍODO
-  Venta Bruta total: ${fmt(kpi.ventaBruta, cty)}
-  Comisión plataforma Rappi: ${fmt(kpi.comision, cty)}
-  Compensaciones: ${fmt(kpi.compensaciones, cty)}
-  Neto estimado a transferir: ${fmt(kpi.neto, cty)}
-  Total órdenes: ${kpi.ordenes}
-  Inversión DAR de Rappi: ${fmt(kpi.darInversionTotal, cty)}
-  Cuota RappiAds: ${fmt(kpi.cuotaRappiAds, cty)}
-  Cobro diferido ADS (semana vencida): ${fmt(kpi.rappiAdsCollection, cty)}
-  Tarifa efectiva: ${fmtPct(kpi.effectiveFee)}
-  Ajustes manuales + deudas anteriores: ${fmt(kpi.ajustesTotal, cty)}
-  Conciliación OK: ${p.reconciliation.ok ? "SÍ" : `NO — diferencia de ${fmt(p.reconciliation.diff, cty)}`}
-
-ÓRDENES (${p.ordersTable.length}):
-${ordersText || "  Sin órdenes en este período."}
+ÓRDENES (mostrando ${Math.min(p.ordersTable.length,15)} de ${p.ordersTable.length}):
+${ordersText||"Sin órdenes."}
 
 COMPENSACIONES (${p.compRows.length}):
-${compsText || "  Sin compensaciones."}
+${compsText||"Sin compensaciones."}
 
-EXTRA SERVICES (${p.extrasTable.length}):
-${extrasText || "  Sin extra services."}
-
-AJUSTES Y DEUDAS (${p.ajustesRows.length}):
-${ajustesText || "  Sin ajustes manuales."}
-
-CONOCIMIENTO DAR — ${country}
-  Organismo: ${darConfig.organismo} | Norma: ${darConfig.norma}
-  Plazo NC: ${darConfig.plazoNC}
-  Restricciones: ${darConfig.restricciones}
-  Impacto IVA: ${darConfig.ivaTip}
-
-CONOCIMIENTO ADS (SEMANA VENCIDA)
-  Rappi factura ADS por semana vencida. Cobro en Abril = última semana de Marzo.
-  Si rappi_ads_invoiced_collection > 0, ese cobro es de la semana anterior.
-
-DETALLE FISCAL POR REGLA (TAX_RULES — columnas exactas encontradas):
-${(kpi.impuestosPorRegla ?? []).filter(r => r.value > 0).map(r => `  ${r.name}: ${fmt(r.value, cty)} (columna: ${r.match})`).join("\n") || "  Sin reglas fiscales detectadas para este país."}
-
-CONCILIACIÓN (buildConciliation):
-  Estado: ${p.conciliationService?.status ?? "—"}
-  Declarado: ${fmt(p.conciliationService?.declared ?? 0, cty)}
-  Calculado sombra: ${fmt(p.conciliationService?.shadow ?? 0, cty)}
-  Diferencia: ${fmt(p.conciliationService?.diff ?? 0, cty)}
-  Neto calculado por fórmula: ${fmt(p.conciliationService?.netCalculado ?? 0, cty)}
-
-INSTRUCCIONES
-  - Eres un experto contable y farmer de Rappi respondiendo dudas de aliados.
-  - Busca en los datos del paidlot los montos, fechas u órdenes mencionados en la pregunta.
-  - Si el aliado menciona un monto, identifica en qué orden o concepto aparece ese valor exacto.
-  - Si el aliado menciona una fecha, lista las órdenes de esa fecha con sus montos.
-  - Responde en español, de forma clara, empática y directa.
-  - Explica conceptos (DAR, ADS, compensación, impuesto) de manera simple si aplica.
-  - Si el dato no existe en el paidlot, indícalo y sugiere dónde buscarlo.
-  - La respuesta debe ser útil para que el farmer la use como base de un mensaje al aliado.
-  - Máximo 3 párrafos cortos, sin tecnicismos innecesarios.`;
+AJUSTES (${p.ajustesRows.length}):
+${ajustesText||"Sin ajustes."}`;
   }, [paidlot, country]);
 
   const handleSearch = useCallback(async (queryOverride) => {
