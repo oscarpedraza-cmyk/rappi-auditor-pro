@@ -2210,23 +2210,26 @@ INSTRUCCIONES
       }
     }
 
-    // 3. AI fallback — AbortController ensures no setState on unmounted component
+    // 3. AI fallback — Gemini 2.0 Flash
     const ctrl = new AbortController();
     try {
       const context = buildContext();
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: context,
-          messages: [{ role: "user", content: q }],
-        }),
-      });
+      const geminiKey = import.meta.env.VITE_GEMINI_API_KEY ?? "";
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: context }] },
+            contents: [{ role: "user", parts: [{ text: q }] }],
+            generationConfig: { maxOutputTokens: 1000, temperature: 0.3 },
+          }),
+        }
+      );
       const data = await response.json();
-      let text = data.content?.find(b => b.type === "text")?.text ?? "";
+      let text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
       // Intelligent fallback — never leave farmer with a blank/error
       if (!text || text.length < 20) {
