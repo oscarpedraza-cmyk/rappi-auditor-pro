@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ╔══════════════════════════════════════════════════════════════════════════════╗
  * ║   RAPPI PAIDLOT AUDITOR PRO  v4.7  —  Reingeniería Integral                 ║
  * ║   + logQueryToSheets · AdsAlertBanner · Tax % labels                      ║
@@ -730,468 +730,301 @@ const loadPaidlots = () => { try { const r = localStorage.getItem(LS_KEY); retur
 // <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 // <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
-function exportPDF(paidlot, country, aiLog = []) {
+function exportPDF(paidlot, country) {
   if (!paidlot) return;
   const p = paidlot;
   const kpi = p.topKpis;
   const cfg = CONFIG.countries[country] ?? CONFIG.countries["No detectado"];
   const fmtV = (v) => new Intl.NumberFormat(cfg.locale, { style: "currency", currency: cfg.currency, maximumFractionDigits: 2 }).format(v ?? 0);
 
-  // ── Try jsPDF (CDN loaded) — fall back to full narrative HTML print report ──
-  const jsPDFCtor = window.jspdf?.jsPDF ?? window.jsPDF ?? null;
-  if (!jsPDFCtor) {
-    const taxRows = (kpi.impuestosPorRegla ?? []).filter(r => r.value > 0);
-    const totalAPagarHtml = kpi.totalAPagar ?? kpi.neto;
-    const adsPct = kpi.ventaBruta > 0 && kpi.cuotaRappiAds > 0 ? kpi.cuotaRappiAds / kpi.ventaBruta : 0;
-    const feePct = (kpi.effectiveFee * 100).toFixed(1);
-    const darCfg = DAR_CONFIG[country] ?? DAR_CONFIG["No detectado"];
-    const taxCfg = COUNTRY_TAX_DETAIL[country] ?? COUNTRY_TAX_DETAIL["No detectado"];
 
-    // Narrative: executive summary paragraph
-    const resumenEjecutivo = `Durante el período del ${p.resumen.inicio} al ${p.resumen.fin}, <strong>${p.meta.tienda}</strong> procesó <strong>${kpi.ordenes} órdenes</strong> con ventas brutas de <strong>${fmtV(kpi.ventaBruta)}</strong>. El importe neto a transferir según la liquidación oficial es <strong>${fmtV(totalAPagarHtml)}</strong>, con una tarifa efectiva (comisión + impuestos sobre ventas) de <strong>${feePct}%</strong>${kpi.effectiveFee > 0.35 ? " — <strong style='color:#dc2626'>por encima del umbral recomendado del 35%</strong>" : " — dentro del rango saludable"}. ${kpi.hasDar ? `Rappi invirtió <strong>${fmtV(kpi.darInversionTotal)}</strong> en descuentos DAR para generar demanda, lo que no afecta negativamente el ingreso neto del aliado.` : "No hay inversión DAR activa en este período."}`;
+  // ── Derived values ────────────────────────────────────────────────────────
+  const totalAPagar   = kpi.totalAPagar ?? kpi.neto;
+  const totalImpuestos = kpi.impuestosTotalExacto ?? kpi.totalImpuestos ?? 0;
+  const adsPct        = kpi.ventaBruta > 0 && kpi.cuotaRappiAds > 0 ? kpi.cuotaRappiAds / kpi.ventaBruta : 0;
+  const taxPctVentas  = kpi.ventaBruta > 0 ? totalImpuestos / kpi.ventaBruta : 0;
+  const feePct        = (kpi.effectiveFee * 100).toFixed(1);
+  const darCfg        = DAR_CONFIG[country]        ?? DAR_CONFIG["No detectado"];
+  const taxCfg        = COUNTRY_TAX_DETAIL[country] ?? COUNTRY_TAX_DETAIL["No detectado"];
+  const taxRows       = (kpi.impuestosPorRegla ?? []).filter(r => r.value > 0);
+  const pdfSafe = (s) => String(s ?? "").replace(/[^ -ÿ]/g, "").replace(/\s+/g, " ").trim();
 
-    // Action plans
-    const planes = [];
-    if (!kpi.hasDar && kpi.ventaBruta > 0)
-      planes.push({ icon: "🎯", titulo: "Activar campaña DAR", texto: `El aliado tiene buen volumen de ventas (${fmtV(kpi.ventaBruta)}). Con DAR activo, Rappi financia descuentos al cliente, aumentando la conversión sin reducir el neto del aliado. Evalúa si cumple los requisitos de GMV mínimo para activar esta herramienta.` });
-    if (kpi.hasDar && kpi.ventaBruta > 0)
-      planes.push({ icon: "📈", titulo: "Escalar inversión DAR", texto: `La inversión DAR actual (${fmtV(kpi.darInversionTotal)}) está generando demanda activa. Si el aliado tiene capacidad operativa, considera incrementar el descuento o extender el rango de productos elegibles para maximizar el volumen de órdenes y la facturación bruta.` });
-    if (!kpi.cuotaRappiAds || kpi.cuotaRappiAds === 0)
-      planes.push({ icon: "📺", titulo: "Iniciar pauta RappiAds", texto: "El aliado no tiene inversión activa en RappiAds este período. Una pauta bien segmentada (banners, patrocinados) puede incrementar la visibilidad en momentos clave (hora pico, fines de semana) y generar un retorno de 3x a 5x sobre la inversión en restaurantes con buena puntuación." });
-    if (kpi.cuotaRappiAds > 0 && adsPct < 0.10)
-      planes.push({ icon: "📺", titulo: "Incrementar inversión RappiAds", texto: `La cuota actual de RappiAds (${fmtV(kpi.cuotaRappiAds)}, ${(adsPct*100).toFixed(1)}% de las ventas facturadas) está por debajo del umbral de alerta del 10%. Hay margen para aumentar la pauta y capturar más tráfico sin comprometer el flujo de caja.` });
-    if (adsPct > 0.10)
-      planes.push({ icon: "⚠️", titulo: "Revisar ROI de RappiAds", texto: `La cuota de RappiAds (${fmtV(kpi.cuotaRappiAds)}) representa el <strong>${(adsPct*100).toFixed(1)}% de las Ventas Facturadas</strong>, superando el umbral del 10%. Antes de renovar la pauta, verifica con el aliado si el incremento en órdenes justifica esta inversión. Si el GMV aumentó proporcionalmente, la pauta es eficiente; de lo contrario, reduce el booking para el próximo período.` });
-    if (kpi.compensaciones > kpi.ventaBruta * 0.05)
-      planes.push({ icon: "🔄", titulo: "Reducir tasa de compensaciones", texto: `Las compensaciones (${fmtV(kpi.compensaciones)}) superan el 5% de la venta bruta, lo que puede indicar problemas operativos: demoras de entrega, pedidos incompletos o productos no disponibles. Revisa con el aliado los motivos más frecuentes y planifica mejoras en stock y tiempos de preparación.` });
-    if (kpi.effectiveFee > 0.35)
-      planes.push({ icon: "🧾", titulo: "Optimizar carga fiscal", texto: `La tarifa efectiva de ${feePct}% supera el umbral recomendado del 35%. Verifica si el aliado tiene certificados de exención o reducción de retenciones vigentes ante ${darCfg.organismo}. Un certificado actualizado puede reducir significativamente las retenciones y mejorar el neto.` });
-    if (kpi.hasDar)
-      planes.push({ icon: "📄", titulo: "Emitir Nota de Crédito DAR", texto: `Con DAR activo, el aliado debe emitir la Nota de Crédito correspondiente ante ${darCfg.organismo} (${darCfg.norma}) para reflejar el descuento fiscalmente y reducir la base del ${taxCfg.iva}. Plazo máximo: ${darCfg.plazoNC}.` });
+  // ── Recomendaciones de Facturación (data-driven) ─────────────────────────
+  const recosFact = [];
+  if (!kpi.hasDar && kpi.ventaBruta > 0)
+    recosFact.push({ prio: "alta", titulo: "Activar campaña DAR", texto: `Con ${fmtV(kpi.ventaBruta)} en ventas brutas, el aliado cumple el perfil para activar DAR. Rappi financia descuentos al consumidor final, incrementando la conversión sin afectar el neto del aliado.` });
+  if (kpi.hasDar)
+    recosFact.push({ prio: "media", titulo: "Escalar inversión DAR", texto: `La inversión DAR actual de ${fmtV(kpi.darInversionTotal)} está generando demanda activa. Ampliar el rango de productos elegibles o incrementar el descuento puede maximizar el volumen de órdenes.` });
+  if (!kpi.cuotaRappiAds || kpi.cuotaRappiAds === 0)
+    recosFact.push({ prio: "media", titulo: "Iniciar pauta RappiAds", texto: `El aliado no tiene inversión activa en RappiAds. Una pauta bien segmentada en hora pico puede triplicar la visibilidad y generar un retorno de 3x a 5x sobre la inversión.` });
+  if (kpi.cuotaRappiAds > 0 && adsPct < 0.10)
+    recosFact.push({ prio: "baja", titulo: "Incrementar RappiAds", texto: `La cuota de ${fmtV(kpi.cuotaRappiAds)} (${(adsPct*100).toFixed(1)}% de ventas) está en zona saludable con margen de crecimiento. Aumentar la pauta puede capturar más tráfico sin comprometer el flujo de caja.` });
+  if (adsPct > 0.20)
+    recosFact.push({ prio: "alta", titulo: "Revisar ROI de RappiAds", texto: `La cuota de RappiAds representa el ${(adsPct*100).toFixed(1)}% de ventas — supera el umbral crítico del 20%. Antes de renovar, verificar que el incremento en pedidos justifique esta inversión.` });
+  else if (adsPct > 0.10)
+    recosFact.push({ prio: "media", titulo: "Monitorear ROI de RappiAds", texto: `La cuota de RappiAds (${(adsPct*100).toFixed(1)}% de ventas) supera el 10%. Verificar que las campañas estén generando retorno visible en pedidos y GMV.` });
+  if (kpi.compensaciones > kpi.ventaBruta * 0.05)
+    recosFact.push({ prio: "alta", titulo: "Reducir compensaciones", texto: `Las compensaciones (${fmtV(kpi.compensaciones)}, ${(kpi.compensaciones/kpi.ventaBruta*100).toFixed(1)}% de ventas) superan el umbral del 5%. Revisar stock, tiempos de preparación y pedidos incompletos con el aliado.` });
 
-    const fallbackWin = window.open("", "_blank");
-    if (!fallbackWin) return;
-    fallbackWin.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Informe de Período — ${p.meta.tienda}</title>
+  // ── Recomendaciones Fiscales (data-driven) ───────────────────────────────
+  const recosFisc = [];
+  if (kpi.hasDar)
+    recosFisc.push({ prio: "alta", titulo: "Emitir Nota de Crédito DAR", texto: `Con DAR activo, el aliado debe emitir la Nota de Crédito correspondiente ante ${darCfg.organismo} (${darCfg.norma}) dentro del plazo: ${darCfg.plazoNC}. Esto reduce la base del ${taxCfg.iva} y optimiza la carga fiscal del período.` });
+  if (kpi.effectiveFee > 0.35)
+    recosFisc.push({ prio: "alta", titulo: "Tarifa efectiva elevada — acción requerida", texto: `La tarifa efectiva del ${feePct}% supera el umbral recomendado del 35%. Verificar si el aliado tiene certificados de exención o reducción de retenciones vigentes ante ${darCfg.organismo}.` });
+  if (taxPctVentas > 0.15)
+    recosFisc.push({ prio: "alta", titulo: "Carga impositiva alta", texto: `Los impuestos representan el ${(taxPctVentas*100).toFixed(1)}% de las ventas brutas — por encima del promedio del sector. Revisar con el contador del aliado si existen regímenes especiales aplicables en ${country}.` });
+  if (kpi.ajustesTotal && kpi.ajustesTotal > kpi.ventaBruta * 0.05)
+    recosFisc.push({ prio: "media", titulo: "Ajustes contables elevados", texto: `Los ajustes del período (${fmtV(kpi.ajustesTotal)}) superan el 5% de las ventas. Validar con el equipo contable si corresponden a correcciones de liquidaciones anteriores.` });
+  if (!recosFisc.length)
+    recosFisc.push({ prio: "baja", titulo: "Situación fiscal en orden", texto: `Los indicadores fiscales del período se encuentran dentro de rangos normales para ${country}. Se recomienda mantener la documentación actualizada.` });
+
+  // ── Helpers de prioridad ─────────────────────────────────────────────────
+  const prioLabel  = { alta: "PRIORITARIO", media: "RECOMENDADO", baja: "PREVENTIVO" };
+  const prioCss    = { alta: "reco-alta",   media: "reco-media",  baja: "reco-baja"  };
+
+  // ── Render HTML ───────────────────────────────────────────────────────────
+  const win = window.open("", "_blank");
+  if (!win) { alert("El navegador bloqueó la ventana emergente. Permite popups para este sitio."); return; }
+
+  const bars = [
+    { label: "Ventas Brutas",       val: kpi.ventaBruta,            color: "#22c55e" },
+    { label: "Total a Pagar",       val: totalAPagar,               color: "#f59e0b" },
+    { label: "Comisión Plataforma", val: Math.abs(kpi.comision),    color: "#ef4444" },
+    { label: "Total Impuestos",     val: totalImpuestos,            color: "#0ea5e9" },
+    ...(kpi.hasDar           ? [{ label: "Inversión DAR",   val: kpi.darInversionTotal, color: "#f97316" }] : []),
+    ...(kpi.cuotaRappiAds > 0? [{ label: "Cuota RappiAds", val: kpi.cuotaRappiAds,     color: "#7c3aed" }] : []),
+    ...(kpi.compensaciones>0 ? [{ label: "Compensaciones",  val: kpi.compensaciones,    color: "#8b5cf6" }] : []),
+  ];
+  const base = kpi.ventaBruta || 1;
+
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Informe Financiero — ${pdfSafe(p.meta.tienda)}</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#0f172a;padding:32px;max-width:960px;margin:0 auto;line-height:1.6}
-  .header{background:linear-gradient(135deg,#ff441f,#ff6b47);color:white;padding:22px 28px;border-radius:14px;margin-bottom:24px}
-  .header h1{font-size:22px;font-weight:900;margin-bottom:6px}
-  .header p{font-size:12px;opacity:.9;line-height:1.8}
-  .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
-  .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px}
-  .kpi-label{font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
-  .kpi-val{font-size:18px;font-weight:900;line-height:1.2}
-  .section{margin-bottom:22px;padding:18px 22px;border:1px solid #e2e8f0;border-radius:12px}
-  .section h2{font-size:15px;font-weight:800;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #f1f5f9;display:flex;align-items:center;gap:8px}
-  .item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f8fafc;font-size:12px}
-  .item:last-child{border-bottom:none}.item-val{font-weight:800}
-  .pill{display:inline-flex;align-items:center;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700}
-  .pill-ok{background:#dcfce7;color:#166534}.pill-warn{background:#fee2e2;color:#dc2626}
-  .bar-wrap{margin:16px 0;display:flex;flex-direction:column;gap:6px}
-  .bar-row{display:flex;align-items:center;gap:10px;font-size:11px}
-  .bar-label{width:200px;color:#475569;flex-shrink:0;text-align:right}
-  .bar-bg{flex:1;background:#f1f5f9;border-radius:4px;height:16px;position:relative}
-  .bar-fill{height:100%;border-radius:4px;transition:width .3s}
-  .bar-val{width:90px;text-align:right;font-weight:800;font-size:11px;flex-shrink:0}
-  .plan{padding:14px 18px;border-radius:10px;margin-bottom:12px;border-left:5px solid #ff441f}
-  .plan h3{font-size:13px;font-weight:800;margin-bottom:5px;color:#0f172a}
-  .plan p{font-size:12px;color:#334155;line-height:1.6}
-  .plan-low{background:#f0fdf4;border-color:#22c55e}
-  .plan-med{background:#fff7ed;border-color:#f97316}
-  .plan-high{background:#fef2f2;border-color:#ef4444}
-  .anomaly{padding:10px 14px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:6px;margin-bottom:8px;font-size:12px}
-  .footer{margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center}
-  @media print{body{padding:16px}button{display:none!important}.no-print{display:none!important}}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,Arial,sans-serif;font-size:13px;color:#0f172a;background:#f1f5f9}
+.page{max-width:900px;margin:0 auto;background:white}
+
+/* ── Header ── */
+.hdr{background:linear-gradient(135deg,#ff441f 0%,#ff6b47 55%,#c2410c 100%);padding:36px 44px 32px;color:white;position:relative;overflow:hidden}
+.hdr::after{content:'';position:absolute;top:-60px;right:-60px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,0.05);pointer-events:none}
+.hdr-top{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.hdr-mark{width:48px;height:48px;border-radius:12px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:24px;border:2px solid rgba(255,255,255,0.28);flex-shrink:0}
+.hdr-brand{font-size:11px;font-weight:800;opacity:.8;letter-spacing:.1em;text-transform:uppercase}
+.hdr h1{font-size:28px;font-weight:900;letter-spacing:-0.02em;line-height:1.1;margin-bottom:10px}
+.hdr-meta{font-size:12px;opacity:.85;line-height:2.1}
+.hdr-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.tag{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700}
+
+/* ── Body ── */
+.body{padding:0 44px 48px}
+
+/* ── Section ── */
+.sec{margin-top:36px}
+.sec-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.sec-title::after{content:'';flex:1;height:1px;background:#e2e8f0}
+
+/* ── Executive summary ── */
+.exec{background:linear-gradient(135deg,#fff7ed,#fffbf5);border:1.5px solid #fed7aa;border-radius:14px;padding:22px 26px;font-size:13px;color:#1e293b;line-height:1.85}
+.exec strong{color:#c2410c}
+
+/* ── KPI grid ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{border:1.5px solid #e2e8f0;border-radius:13px;padding:16px 18px;background:#f8fafc}
+.kpi-label{font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px}
+.kpi-val{font-size:19px;font-weight:900;line-height:1;letter-spacing:-0.01em}
+.kpi-sub{font-size:10px;color:#94a3b8;margin-top:5px;font-weight:500}
+.kpi-warn{background:#fff7ed;border-color:#fbd38d}
+
+/* ── Bar chart ── */
+.bars{display:flex;flex-direction:column;gap:10px}
+.bar-row{display:grid;grid-template-columns:180px 1fr 120px;align-items:center;gap:14px}
+.bar-lbl{font-size:11px;color:#64748b;text-align:right;font-weight:500}
+.bar-bg{background:#f1f5f9;border-radius:6px;height:16px;overflow:hidden}
+.bar-fill{height:100%;border-radius:6px}
+.bar-val{font-size:12px;font-weight:800;text-align:right}
+
+/* ── Fiscal ── */
+.fiscal-pct{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.fpct{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:14px;padding:18px;text-align:center}
+.fpct-val{font-size:32px;font-weight:900;color:#0369a1;line-height:1}
+.fpct-lbl{font-size:11px;color:#0284c7;margin-top:6px;font-weight:600}
+.tax-row{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:7px}
+.tax-name{font-size:12px;color:#334155;font-weight:500}
+.tax-pct-badge{font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:12px;padding:2px 8px;font-weight:700;margin-left:8px}
+.tax-val{font-size:13px;font-weight:800;color:#0369a1}
+.tax-total{background:#e0f2fe;border-color:#7dd3fc}
+.tax-total .tax-name{font-weight:800;color:#0369a1;font-size:13px}
+.tax-total .tax-val{font-size:15px}
+
+/* ── Recommendations ── */
+.reco{border-radius:13px;padding:18px 22px;margin-bottom:10px;border-left:4px solid}
+.reco-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.reco-title{font-size:13px;font-weight:800;color:#0f172a}
+.reco-badge{font-size:9px;font-weight:800;padding:3px 10px;border-radius:20px;letter-spacing:.05em}
+.reco-text{font-size:12px;color:#334155;line-height:1.7}
+.reco-alta{background:#fef2f2;border-color:#ef4444}
+.reco-alta .reco-badge{background:#fee2e2;color:#dc2626}
+.reco-media{background:#fff7ed;border-color:#f97316}
+.reco-media .reco-badge{background:#ffedd5;color:#c2410c}
+.reco-baja{background:#f0fdf4;border-color:#22c55e}
+.reco-baja .reco-badge{background:#dcfce7;color:#166534}
+
+/* ── Footer ── */
+.ftr{margin:0 44px;padding:20px 0;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8}
+.ftr-brand{font-weight:800;color:#ff441f;font-size:11px}
+
+/* ── Print ── */
+.no-print{margin:20px 44px 0;display:flex;gap:10px}
+@media print{
+  body{background:white}
+  .no-print{display:none!important}
+  .page{max-width:100%}
+  .body{padding:0 32px 32px}
+  .hdr{padding:24px 32px 22px}
+  .kpi-grid{grid-template-columns:repeat(4,1fr)}
+  .sec{margin-top:24px}
+}
 </style></head><body>
+<div class="page">
 
-<div class="header">
-  <h1>Informe de Período de Ventas — ${p.meta.tienda}</h1>
-  <p>${cfg.flag ?? ""} ${country} &nbsp;·&nbsp; Paidlot ${p.meta.paidlotId} &nbsp;·&nbsp; Período: ${p.resumen.inicio} → ${p.resumen.fin}<br>
-  Fecha contractual de pago: ${p.resumen.fechaPago} &nbsp;·&nbsp; Generado: ${new Date().toLocaleString("es")}</p>
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-top">
+    <div class="hdr-mark">R</div>
+    <div class="hdr-brand">Rappi Paidlot Auditor Pro</div>
+  </div>
+  <h1>${pdfSafe(p.meta.tienda)}</h1>
+  <div class="hdr-meta">
+    ${cfg.flag ?? ""} ${country} &nbsp;·&nbsp; Paidlot <strong>${pdfSafe(p.meta.paidlotId)}</strong> &nbsp;·&nbsp; Período: ${p.resumen.inicio} → ${p.resumen.fin}<br>
+    Fecha de pago: <strong>${p.resumen.fechaPago}</strong> &nbsp;·&nbsp; Generado el ${new Date().toLocaleDateString("es", { day:"2-digit", month:"long", year:"numeric" })}
+  </div>
+  <div class="hdr-tags">
+    ${kpi.hasDar ? '<span class="tag">DAR Activo</span>' : '<span class="tag">Sin DAR</span>'}
+    ${kpi.cuotaRappiAds > 0 ? '<span class="tag">RappiAds Activo</span>' : ''}
+    <span class="tag">${kpi.ordenes} ordenes</span>
+    <span class="tag">Tarifa efectiva ${feePct}%${kpi.effectiveFee > 0.35 ? ' ALTA' : ''}</span>
+  </div>
 </div>
 
-<button class="no-print" onclick="window.print()" style="margin-bottom:20px;padding:10px 24px;background:#ff441f;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Imprimir / Guardar como PDF</button>
-
-<div style="margin-bottom:18px;display:flex;align-items:center;gap:10px">
-  <span class="pill ${p.conciliationService?.status==='OK'?'pill-ok':'pill-warn'}">${p.conciliationService?.status==='OK'?'Factura leída correctamente':'REVISAR — diferencia detectada'}</span>
-  <span style="font-size:12px;color:#64748b">Conciliación sombra vs declarada: diferencia ${fmtV(Math.abs(p.reconciliation?.diff??0))}</span>
+<!-- PRINT BUTTON -->
+<div class="no-print">
+  <button onclick="window.print()" style="padding:10px 22px;background:#ff441f;color:white;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer">Imprimir / Guardar como PDF</button>
 </div>
+
+<div class="body">
 
 <!-- RESUMEN EJECUTIVO -->
-<div class="section" style="background:#fefce8;border-color:#fde68a">
-  <h2><span>Resumen del Período</span></h2>
-  <p style="font-size:13px;line-height:1.8;color:#1e293b">${resumenEjecutivo}</p>
+<div class="sec">
+  <div class="sec-title">Resumen Ejecutivo</div>
+  <div class="exec">
+    Durante el período del <strong>${p.resumen.inicio}</strong> al <strong>${p.resumen.fin}</strong>,
+    <strong>${pdfSafe(p.meta.tienda)}</strong> registró <strong>${kpi.ordenes} órdenes</strong> con ventas brutas de
+    <strong>${fmtV(kpi.ventaBruta)}</strong>. El importe neto a transferir es <strong>${fmtV(totalAPagar)}</strong>,
+    con una tarifa efectiva de <strong style="color:${kpi.effectiveFee > 0.35 ? "#dc2626" : "#166534"}">${feePct}%</strong>
+    ${kpi.effectiveFee > 0.35 ? "— <strong style='color:#dc2626'>por encima del umbral recomendado del 35%</strong>" : "— dentro del rango saludable"}.
+    ${kpi.hasDar ? `Rappi invirtió <strong>${fmtV(kpi.darInversionTotal)}</strong> en descuentos DAR, generando demanda sin afectar el neto del aliado.` : "No hay inversión DAR activa en este período."}
+    ${totalImpuestos > 0 ? `La carga impositiva es de <strong>${fmtV(totalImpuestos)}</strong>, representando el <strong>${(taxPctVentas*100).toFixed(1)}%</strong> de las ventas brutas.` : ""}
+  </div>
 </div>
 
-<!-- KPIs -->
-<div class="kpi-grid">
-  <div class="kpi"><div class="kpi-label">Ventas Brutas</div><div class="kpi-val" style="color:#22c55e">${fmtV(kpi.ventaBruta)}</div></div>
-  <div class="kpi"><div class="kpi-label">Total a Pagar</div><div class="kpi-val" style="color:#f59e0b">${fmtV(totalAPagarHtml)}</div></div>
-  <div class="kpi"><div class="kpi-label">Comisión + Tasas</div><div class="kpi-val" style="color:#ef4444">${fmtV(kpi.comision)}</div></div>
-  <div class="kpi"><div class="kpi-label">Impuestos</div><div class="kpi-val" style="color:#0ea5e9">${fmtV(kpi.impuestosTotalExacto??kpi.totalImpuestos)}</div></div>
-  <div class="kpi"><div class="kpi-label">Inversión DAR</div><div class="kpi-val" style="color:#f97316">${fmtV(kpi.darInversionTotal)}</div></div>
-  <div class="kpi"><div class="kpi-label">Tarifa Efectiva</div><div class="kpi-val" style="color:${kpi.effectiveFee>0.35?'#dc2626':'#10b981'}">${feePct}%${kpi.effectiveFee>0.35?' ▲':' ✓'}</div></div>
+<!-- RESUMEN FINANCIERO -->
+<div class="sec">
+  <div class="sec-title">Resumen Financiero</div>
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Ventas Brutas</div>
+      <div class="kpi-val" style="color:#22c55e">${fmtV(kpi.ventaBruta)}</div>
+      <div class="kpi-sub">${kpi.ordenes} órdenes</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total a Pagar</div>
+      <div class="kpi-val" style="color:#f59e0b">${fmtV(totalAPagar)}</div>
+      <div class="kpi-sub">Neto transferido</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Comisión Plataforma</div>
+      <div class="kpi-val" style="color:#ef4444">${fmtV(Math.abs(kpi.comision))}</div>
+      <div class="kpi-sub">Uso y alquiler Rappi</div>
+    </div>
+    <div class="kpi ${kpi.effectiveFee > 0.35 ? "kpi-warn" : ""}">
+      <div class="kpi-label">Tarifa Efectiva</div>
+      <div class="kpi-val" style="color:${kpi.effectiveFee > 0.35 ? "#c2410c" : "#10b981"}">${feePct}%</div>
+      <div class="kpi-sub">${kpi.effectiveFee > 0.35 ? "⚠ Supera el 35%" : "✓ Rango normal"}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Impuestos</div>
+      <div class="kpi-val" style="color:#0ea5e9">${fmtV(totalImpuestos)}</div>
+      <div class="kpi-sub">${(taxPctVentas*100).toFixed(1)}% de ventas brutas</div>
+    </div>
+    <div class="kpi" style="${kpi.hasDar ? "background:#fff7ed;border-color:#fbd38d" : ""}">
+      <div class="kpi-label">Inversión DAR</div>
+      <div class="kpi-val" style="color:#f97316">${fmtV(kpi.darInversionTotal)}</div>
+      <div class="kpi-sub">${kpi.hasDar ? "Activo este período" : "Sin DAR activo"}</div>
+    </div>
+    ${kpi.cuotaRappiAds > 0 ? `<div class="kpi"><div class="kpi-label">Cuota RappiAds</div><div class="kpi-val" style="color:#7c3aed">${fmtV(kpi.cuotaRappiAds)}</div><div class="kpi-sub">${(adsPct*100).toFixed(1)}% de ventas</div></div>` : ""}
+    ${kpi.compensaciones > 0 ? `<div class="kpi"><div class="kpi-label">Compensaciones</div><div class="kpi-val" style="color:#8b5cf6">${fmtV(kpi.compensaciones)}</div><div class="kpi-sub">${(kpi.compensaciones/kpi.ventaBruta*100).toFixed(1)}% de ventas</div></div>` : ""}
+  </div>
 </div>
 
-<!-- GRÁFICA DE COMPOSICIÓN DEL PERÍODO -->
-<div class="section">
-  <h2>Composición del Período (sobre Venta Bruta)</h2>
-  ${(() => {
-    const base = kpi.ventaBruta || 1;
-    const bars = [
-      { label:"Venta Bruta", val:kpi.ventaBruta, color:"#22c55e" },
-      { label:"Total a Pagar", val:totalAPagarHtml, color:"#f59e0b" },
-      { label:"Comisión Plataforma", val:kpi.comision, color:"#ef4444" },
-      { label:"Impuestos", val:kpi.impuestosTotalExacto??kpi.totalImpuestos, color:"#0ea5e9" },
-      ...(kpi.hasDar?[{ label:"Inversión DAR", val:kpi.darInversionTotal, color:"#f97316" }]:[]),
-      ...(kpi.cuotaRappiAds>0?[{ label:"Cuota RappiAds", val:kpi.cuotaRappiAds, color:"#7c3aed" }]:[]),
-      ...(kpi.compensaciones>0?[{ label:"Compensaciones", val:kpi.compensaciones, color:"#8b5cf6" }]:[]),
-    ];
-    return `<div class="bar-wrap">${bars.map(b=>`<div class="bar-row"><div class="bar-label">${b.label}</div><div class="bar-bg"><div class="bar-fill" style="width:${Math.min(100,(b.val/base*100)).toFixed(1)}%;background:${b.color}"></div></div><div class="bar-val" style="color:${b.color}">${fmtV(b.val)}</div></div>`).join('')}</div>`;
-  })()}
+<!-- COMPOSICIÓN -->
+<div class="sec">
+  <div class="sec-title">Composición sobre Venta Bruta</div>
+  <div class="bars">
+    ${bars.map(b => `
+    <div class="bar-row">
+      <div class="bar-lbl">${b.label}</div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${Math.min(100,(b.val/base*100)).toFixed(1)}%;background:${b.color}"></div></div>
+      <div class="bar-val" style="color:${b.color}">${fmtV(b.val)}</div>
+    </div>`).join("")}
+  </div>
 </div>
 
-${taxRows.length>0?`<div class="section">
-  <h2>Detalle de Impuestos por Regla Fiscal</h2>
-  ${taxRows.map(r=>`<div class="item"><span>${r.name} <span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:12px;padding:1px 7px;font-weight:700">${r.pct??'—'}</span></span><span class="item-val" style="color:#0369a1">${fmtV(r.value)}</span></div>`).join('')}
-</div>`:''}
-
-${p.compRows.length>0?`<div class="section">
-  <h2>Descuentos sobre la venta — Compensaciones (${p.compRows.length})</h2>
-  ${p.compRows.slice(0,15).map(c=>`<div class="item"><span>${c.fecha} · Orden ${c.orderId} · ${c.razon}</span><span class="item-val">${fmtV(c.monto)}</span></div>`).join('')}
-  ${p.compRows.length>15?`<div style="font-size:11px;color:#94a3b8;padding-top:6px">... y ${p.compRows.length-15} compensaciones más</div>`:''}
-</div>`:''}
-
-${p.ajustesRows.length>0?`<div class="section">
-  <h2>Ajustes y Deudas</h2>
-  ${p.ajustesRows.map(a=>`<div class="item"><span>${a.fecha} · ${a.razon}</span><span class="item-val" style="color:${a.ajuste<0?'#dc2626':'#10b981'}">${fmtV(a.ajuste)}</span></div>`).join('')}
-</div>`:''}
-
-${aiLog.length>0?`<div class="section">
-  <h2>Log del Asistente de Auditoría</h2>
-  ${aiLog.map(e=>`<div style="margin-bottom:10px;padding:8px 12px;background:#f8fafc;border-radius:8px;font-size:11px"><strong>${e.ts} — Consulta:</strong> ${e.q}<br><span style="color:#475569">${e.a}</span></div>`).join('')}
-</div>`:''}
-
-<!-- PLAN DE ACCIÓN -->
-<div class="section" style="border-color:#ff441f">
-  <h2 style="color:#ff441f">Plan de Acción para el Próximo Período</h2>
-  ${planes.length===0?'<p style="color:#64748b;font-size:12px">El período se encuentra dentro de parámetros óptimos. Mantener la estrategia actual.</p>':planes.map((pl,i)=>`<div class="plan ${i===0?'plan-low':i%2===0?'plan-med':'plan-high'}"><h3>${pl.icon} ${pl.titulo}</h3><p>${pl.texto}</p></div>`).join('')}
+<!-- ANÁLISIS FISCAL -->
+<div class="sec">
+  <div class="sec-title">Análisis Fiscal</div>
+  <div class="fiscal-pct">
+    <div class="fpct">
+      <div class="fpct-val">${(taxPctVentas*100).toFixed(1)}%</div>
+      <div class="fpct-lbl">de las Ventas Brutas</div>
+    </div>
+    <div class="fpct">
+      <div class="fpct-val">${totalAPagar !== 0 ? (totalImpuestos/Math.abs(totalAPagar)*100).toFixed(1) : "0.0"}%</div>
+      <div class="fpct-lbl">del Total a Pagar</div>
+    </div>
+  </div>
+  ${taxRows.length > 0
+    ? taxRows.map(r => `<div class="tax-row"><div class="tax-name">${pdfSafe(r.name)}<span class="tax-pct-badge">${r.pct ?? ""}</span></div><div class="tax-val">${fmtV(r.value)}</div></div>`).join("") +
+      `<div class="tax-row tax-total"><div class="tax-name">TOTAL IMPUESTOS</div><div class="tax-val">${fmtV(totalImpuestos)}</div></div>`
+    : `<div class="tax-row"><div class="tax-name" style="color:#94a3b8">No se detectaron impuestos en este período</div></div>`
+  }
 </div>
 
-<div class="footer">
-  Rappi Paidlot Auditor Pro · Informe generado automáticamente el ${new Date().toLocaleString("es")} · Validación basada en Playbook de Merchant Revenue de Rappi<br>
-  <em>Este informe es de uso interno del farmer y no reemplaza la liquidación oficial de Rappi.</em>
+<!-- RECOMENDACIONES DE FACTURACIÓN -->
+<div class="sec">
+  <div class="sec-title">Recomendaciones de Facturación</div>
+  ${recosFact.length === 0
+    ? `<div class="reco reco-baja"><div class="reco-head"><div class="reco-title">Operación en parámetros óptimos</div><span class="reco-badge">PREVENTIVO</span></div><div class="reco-text">Los indicadores de facturación se encuentran dentro de rangos saludables. Mantener la estrategia actual.</div></div>`
+    : recosFact.map(r => `<div class="reco ${prioCss[r.prio]}"><div class="reco-head"><div class="reco-title">${r.titulo}</div><span class="reco-badge">${prioLabel[r.prio]}</span></div><div class="reco-text">${r.texto}</div></div>`).join("")}
 </div>
+
+<!-- RECOMENDACIONES FISCALES -->
+<div class="sec">
+  <div class="sec-title">Recomendaciones Fiscales</div>
+  ${recosFisc.map(r => `<div class="reco ${prioCss[r.prio]}"><div class="reco-head"><div class="reco-title">${r.titulo}</div><span class="reco-badge">${prioLabel[r.prio]}</span></div><div class="reco-text">${r.texto}</div></div>`).join("")}
+</div>
+
+</div><!-- /body -->
+
+<!-- FOOTER -->
+<div class="ftr">
+  <div><span class="ftr-brand">Rappi Paidlot Auditor Pro</span> &nbsp;·&nbsp; ${new Date().toLocaleString("es")}</div>
+  <div>Documento de uso interno &nbsp;·&nbsp; No reemplaza la liquidación oficial de Rappi</div>
+</div>
+
+</div><!-- /page -->
 </body></html>`);
-    fallbackWin.document.close();
-    return;
-  }
-
-  // Strip non-latin characters (emojis) that jsPDF/Helvetica can't render — avoids garbled chars
-  const pdfSafe = (s) => String(s ?? "").replace(/[^ -ÿ]/g, "").replace(/\s+/g, " ").trim();
-
-  const doc = new jsPDFCtor({ orientation: "portrait", unit: "mm", format: "a4" });
-  const MARGIN = 14;
-  let y = MARGIN;
-
-  // ── HEADER ──────────────────────────────────────────────────────────────────
-  doc.setFillColor(255, 68, 31);
-  doc.rect(0, 0, 210, 18, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Rappi Paidlot Auditor Pro", MARGIN, 12);
-  doc.setFontSize(8);
-  doc.text("Informe de Auditoria Contable", 210 - MARGIN, 12, { align: "right" });
-
-  y = 26;
-  doc.setTextColor(15, 23, 42);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text(pdfSafe(p.meta.tienda), MARGIN, y);
-
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
-  doc.text(pdfSafe(`${country}  |  Paidlot ${p.meta.paidlotId}  |  Periodo: ${p.resumen.inicio} - ${p.resumen.fin}  |  Pago: ${p.resumen.fechaPago}`), MARGIN, y);
-
-  // Conciliation badge
-  const isOk = p.conciliationService?.status === "OK";
-  y += 7;
-  doc.setFillColor(isOk ? 220 : 254, isOk ? 252 : 226, isOk ? 231 : 226);
-  doc.roundedRect(MARGIN, y - 4, 80, 7, 2, 2, "F");
-  doc.setTextColor(isOk ? 21 : 220, isOk ? 128 : 38, isOk ? 61 : 38);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.text(isOk ? "OK - Factura leida correctamente" : "REVISAR - diferencia detectada", MARGIN + 2, y);
-
-  // ── KPI ROW ──────────────────────────────────────────────────────────────────
-  y += 10;
-  const kpiItems = [
-    { label: "Ventas Brutas",   val: fmtV(kpi.ventaBruta),               color: [34, 197, 94] },
-    { label: "Total a Pagar",   val: fmtV(kpi.totalAPagar ?? kpi.neto),   color: [245, 158, 11] },
-    { label: "Inversion DAR",   val: fmtV(kpi.darInversionTotal),         color: [249, 115, 22] },
-    { label: "Impuestos",       val: fmtV(kpi.impuestosTotalExacto ?? kpi.totalImpuestos), color: [14, 165, 233] },
-    { label: "Comision",        val: fmtV(kpi.comision),                  color: [239, 68, 68] },
-    { label: "Tarifa Efectiva", val: `${(kpi.effectiveFee * 100).toFixed(1)}%`, color: kpi.effectiveFee > 0.35 ? [249, 115, 22] : [16, 185, 129] },
-  ];
-  const kpiW = (210 - MARGIN * 2) / kpiItems.length;
-  kpiItems.forEach((k, i) => {
-    const x = MARGIN + i * kpiW;
-    doc.setFillColor(248, 250, 252);
-    doc.rect(x, y, kpiW - 1, 14, "F");
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.setTextColor(148, 163, 184);
-    doc.text(k.label.toUpperCase(), x + 2, y + 4);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(...k.color);
-    doc.text(k.val, x + 2, y + 11);
-  });
-
-  // ── DAR NOTE ─────────────────────────────────────────────────────────────────
-  y += 18;
-  if (kpi.hasDar) {
-    doc.setFillColor(255, 247, 237);
-    doc.rect(MARGIN, y, 182, 8, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(154, 52, 18);
-    doc.text(`DAR activo: Rappi invirtio ${fmtV(kpi.darBeneficioTotal)} para generar demanda. El neto del aliado NO cambia.`, MARGIN + 2, y + 5);
-    y += 12;
-  }
-
-  // ── IMPUESTOS POR REGLA (TAX_RULES breakdown) — Tasa Legal incluida ────────
-  const taxRows = (kpi.impuestosPorRegla ?? []).filter(r => r.value > 0);
-  if (taxRows.length > 0) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text("Impuestos por Regla Fiscal (TAX_RULES)", MARGIN, y);
-    y += 4;
-    doc.autoTable({
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["Concepto", "Tasa Legal", "Columna Exacta", "Monto"]],
-      body: taxRows.map(r => [
-        pdfSafe(r.name),
-        r.pct ?? "—",
-        pdfSafe(r.match.slice(0, 45) + (r.match.length > 45 ? "..." : "")),
-        fmtV(r.value),
-      ]),
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [14, 165, 233], textColor: 255, fontStyle: "bold", fontSize: 8 },
-      alternateRowStyles: { fillColor: [240, 249, 255] },
-      columnStyles: {
-        0: { fontStyle: "bold" },
-        1: { halign: "center", textColor: [3, 105, 161] },
-        2: { fontSize: 7, textColor: [100, 116, 139] },
-        3: { halign: "right", fontStyle: "bold" },
-      },
-    });
-    y = doc.lastAutoTable.finalY + 6;
-  }
-
-  // ── ORDENES ──────────────────────────────────────────────────────────────────
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Ordenes (${p.ordersTable.length})`, MARGIN, y);
-  y += 4;
-  doc.autoTable({
-    startY: y,
-    margin: { left: MARGIN, right: MARGIN },
-    head: [["Fecha", "Orden ID", "Venta Bruta", "DAR", "Comision", "Total a Pagar"]],
-    body: p.ordersTable.map(o => [
-      o.fecha,
-      pdfSafe(o.ordenId),
-      fmtV(o.ventaBruta),
-      o.darTotal > 0 ? fmtV(o.darTotal) : "—",
-      fmtV(Math.abs(o.comision)),
-      fmtV(o.neto),
-    ]),
-    styles: { fontSize: 7, cellPadding: 2 },
-    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontSize: 7 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: {
-      2: { halign: "right" },
-      3: { halign: "right", textColor: [249, 115, 22] },
-      4: { halign: "right" },
-      5: { halign: "right", fontStyle: "bold" },
-    },
-  });
-  y = doc.lastAutoTable.finalY + 6;
-
-  // ── COMPENSACIONES ────────────────────────────────────────────────────────────
-  if (p.compRows.length > 0) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text(`Compensaciones (${p.compRows.length})`, MARGIN, y);
-    y += 4;
-    doc.autoTable({
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["Fecha", "Orden ID", "Razon", "Monto"]],
-      body: p.compRows.map(c => [c.fecha, pdfSafe(c.orderId), pdfSafe(c.razon?.slice(0, 40) ?? "—"), fmtV(c.monto)]),
-      styles: { fontSize: 7, cellPadding: 2 },
-      headStyles: { fillColor: [139, 92, 246], textColor: 255, fontSize: 7 },
-      alternateRowStyles: { fillColor: [237, 233, 254] },
-      columnStyles: { 3: { halign: "right", fontStyle: "bold" } },
-    });
-    y = doc.lastAutoTable.finalY + 6;
-  }
-
-  // ── AJUSTES Y DEUDAS ──────────────────────────────────────────────────────────
-  if (p.ajustesRows.length > 0) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text(`Ajustes y Deudas (${p.ajustesRows.length})`, MARGIN, y);
-    y += 4;
-    doc.autoTable({
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["Fecha", "Orden ID", "Razon", "Ajuste", "Deuda Ant."]],
-      body: p.ajustesRows.map(a => [a.fecha, pdfSafe(a.ordenId), pdfSafe(a.razon?.slice(0, 35) ?? "—"), fmtV(a.ajuste), fmtV(a.deuda)]),
-      styles: { fontSize: 7, cellPadding: 2 },
-      headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 7 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: { 3: { halign: "right", fontStyle: "bold" }, 4: { halign: "right" } },
-    });
-    y = doc.lastAutoTable.finalY + 6;
-  }
-
-  // ── NOTAS DE AUDITORÍA — anomalías detectadas automáticamente ─────────────
-  const anomalias = [];
-  if (kpi.effectiveFee > 0.35)
-    anomalias.push(["ALERTA: Tarifa Efectiva Alta", `${(kpi.effectiveFee*100).toFixed(1)}% (umbral 35%)`, "Verificar NC DAR aplicadas"]);
-  if (kpi.rappiAdsCollection > 0)
-    anomalias.push(["ADS Semana Vencida", fmtV(kpi.rappiAdsCollection), "Cobro del periodo anterior - normal por diseno"]);
-  if (!kpi.hasDar && kpi.ventaBruta > 0)
-    anomalias.push(["Sin DAR activo", fmtV(0), "Evaluar requisitos para campanas Rappi"]);
-  if (kpi.ajustesTotal > kpi.ventaBruta * 0.05)
-    anomalias.push(["ALERTA: Ajustes elevados", fmtV(kpi.ajustesTotal), ">5% de venta bruta - requiere revision"]);
-  if (kpi.compensaciones > kpi.ventaBruta * 0.1)
-    anomalias.push(["ALERTA: Compensaciones altas", fmtV(kpi.compensaciones), ">10% ventas - revisar operativa"]);
-  if (kpi.cuotaRappiAds > 0 && kpi.ventaBruta > 0 && kpi.cuotaRappiAds / kpi.ventaBruta > 0.20)
-    anomalias.push(["ALERTA: Pauta ADS > 20% de ventas", `${((kpi.cuotaRappiAds/kpi.ventaBruta)*100).toFixed(1)}%`, "Evaluar ROI de la pauta con el aliado"]);
-  (kpi.impuestosPorRegla ?? []).filter(r => r.value > kpi.ventaBruta * 0.08)
-    .forEach(r => anomalias.push(["Impuesto excesivo", fmtV(r.value) + " - " + pdfSafe(r.name), "Verificar categorizacion fiscal del aliado"]));
-
-  if (y > 230) { doc.addPage(); y = MARGIN; }
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
-  doc.text(anomalias.length > 0 ? `Notas de Auditoria (${anomalias.length} anomalia${anomalias.length>1?"s":""} detectada${anomalias.length>1?"s":""})` : "Auditoria: sin anomalias detectadas", MARGIN, y);
-  y += 4;
-  if (anomalias.length > 0) {
-    doc.autoTable({
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["Hallazgo", "Valor", "Accion sugerida"]],
-      body: anomalias,
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [234, 179, 8], textColor: [15, 23, 42], fontStyle: "bold", fontSize: 8 },
-      alternateRowStyles: { fillColor: [255, 251, 235] },
-      columnStyles: { 0: { fontStyle: "bold" }, 1: { halign: "right" }, 2: { fontSize: 7 } },
-    });
-    y = doc.lastAutoTable.finalY + 6;
-  } else {
-    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(21, 128, 61);
-    doc.text("Todos los indicadores dentro de rangos normales.", MARGIN, y); y += 8;
-  }
-
-  // ── AI LOG ────────────────────────────────────────────────────────────────────
-  if (aiLog.length > 0) {
-    if (y > 240) { doc.addPage(); y = MARGIN; }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text("Log del Asistente IA", MARGIN, y);
-    y += 4;
-    doc.autoTable({
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["Hora", "Consulta", "Respuesta"]],
-      body: aiLog.map(e => [e.ts, pdfSafe(e.q?.slice(0, 40) ?? ""), pdfSafe(e.a?.slice(0, 80) ?? "")]),
-      styles: { fontSize: 7, cellPadding: 2 },
-      headStyles: { fillColor: [99, 102, 241], textColor: 255, fontSize: 7 },
-      alternateRowStyles: { fillColor: [238, 242, 255] },
-    });
-    y = doc.lastAutoTable.finalY + 6;
-  }
-
-  // ── RESUMEN EJECUTIVO + PLAN DE ACCION ───────────────────────────────────────
-  if (y > 200) { doc.addPage(); y = MARGIN; }
-  const totalAPagarPdf = kpi.totalAPagar ?? kpi.neto;
-  const adsPctPdf = kpi.ventaBruta > 0 && kpi.cuotaRappiAds > 0 ? kpi.cuotaRappiAds / kpi.ventaBruta : 0;
-  const darCfgPdf = DAR_CONFIG[country] ?? DAR_CONFIG["No detectado"];
-  const taxCfgPdf = COUNTRY_TAX_DETAIL[country] ?? COUNTRY_TAX_DETAIL["No detectado"];
-
-  doc.setFillColor(254, 252, 232);
-  doc.rect(MARGIN, y, 182, 6, "F");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(120, 53, 15);
-  doc.text("Resumen del Periodo", MARGIN + 2, y + 4);
-  y += 10;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(30, 41, 59);
-  const resumenLines = doc.splitTextToSize(
-    pdfSafe(`${p.meta.tienda} proceso ${kpi.ordenes} ordenes con ventas brutas de ${fmtV(kpi.ventaBruta)}. Neto a transferir: ${fmtV(totalAPagarPdf)}. Tarifa efectiva: ${(kpi.effectiveFee*100).toFixed(1)}%${kpi.effectiveFee>0.35?" (ALTA — supera el 35%)":" (saludable)"}. ${kpi.hasDar?`Rappi invirtio ${fmtV(kpi.darInversionTotal)} en descuentos DAR generando demanda sin afectar el neto.`:"Sin DAR activo este periodo."}`),
-    182
-  );
-  doc.text(resumenLines, MARGIN, y);
-  y += resumenLines.length * 4 + 8;
-
-  // Plan de accion
-  const planesRows = [];
-  if (!kpi.hasDar && kpi.ventaBruta > 0)
-    planesRows.push(["Activar DAR", pdfSafe(`GMV disponible: ${fmtV(kpi.ventaBruta)}. Rappi financia el descuento al cliente. El aliado no pierde neto.`)]);
-  if (kpi.hasDar)
-    planesRows.push(["Escalar DAR + NC fiscal", pdfSafe(`Emitir Nota Credito ante ${darCfgPdf.organismo} (${darCfgPdf.norma}). Plazo: ${darCfgPdf.plazoNC}. Reduce base de ${taxCfgPdf.iva}.`)]);
-  if (!kpi.cuotaRappiAds || kpi.cuotaRappiAds === 0)
-    planesRows.push(["Iniciar pauta RappiAds", "Sin publicidad activa. Un presupuesto inicial puede triplicar la visibilidad en hora pico."]);
-  if (adsPctPdf > 0 && adsPctPdf < 0.10)
-    planesRows.push(["Incrementar RappiAds", pdfSafe(`Cuota actual ${fmtV(kpi.cuotaRappiAds)} (${(adsPctPdf*100).toFixed(1)}% de ventas). Hay margen para aumentar sin riesgo de flujo de caja.`)]);
-  if (adsPctPdf >= 0.10)
-    planesRows.push(["Revisar ROI de ADS", pdfSafe(`ADS en ${(adsPctPdf*100).toFixed(1)}% de ventas (umbral: 10%). Verificar si GMV escalo proporcionalmente. Reducir booking si ROI es negativo.`)]);
-  if (kpi.compensaciones > kpi.ventaBruta * 0.05)
-    planesRows.push(["Reducir compensaciones", pdfSafe(`${fmtV(kpi.compensaciones)} en compensaciones (>${(kpi.compensaciones/kpi.ventaBruta*100).toFixed(1)}% de ventas). Revisar operativa: stock, tiempos y calidad.`)]);
-  if (kpi.effectiveFee > 0.35)
-    planesRows.push(["Optimizar carga fiscal", pdfSafe(`Tarifa efectiva ${(kpi.effectiveFee*100).toFixed(1)}% supera 35%. Verificar certificados de exencion ante ${darCfgPdf.organismo}.`)]);
-
-  if (planesRows.length > 0) {
-    if (y > 220) { doc.addPage(); y = MARGIN; }
-    doc.setFillColor(255, 68, 31);
-    doc.rect(MARGIN, y, 182, 6, "F");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(255, 255, 255);
-    doc.text("Plan de Accion para el Proximo Periodo", MARGIN + 2, y + 4);
-    y += 8;
-    doc.autoTable({
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["Accion", "Descripcion y justificacion"]],
-      body: planesRows,
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [255, 68, 31], textColor: 255, fontStyle: "bold", fontSize: 8 },
-      alternateRowStyles: { fillColor: [255, 247, 237] },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { fontSize: 7 } },
-    });
-    y = doc.lastAutoTable.finalY + 6;
-  }
-
-  // ── FOOTER ────────────────────────────────────────────────────────────────────
-  const pageCount = doc.internal.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(7);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`Rappi Paidlot Auditor Pro | Generado ${new Date().toLocaleString()} | Pag ${i}/${pageCount}`, MARGIN, 285);
-    doc.text("Validacion automatica contra Playbook de Merchant Revenue - Rappi", MARGIN, 290);
-  }
-
-  doc.save(`paidlot-${pdfSafe(p.meta.paidlotId)}-${country}-${String(p.resumen.inicio ?? "periodo").replace(/\//g, "-")}.pdf`);
+  win.document.close();
 }
 
 
