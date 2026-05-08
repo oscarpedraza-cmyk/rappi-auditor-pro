@@ -723,19 +723,44 @@ const savePaidlots = (list) => { try { localStorage.setItem(LS_KEY, JSON.stringi
 const loadPaidlots = () => { try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : []; } catch { return []; } };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// § 6. CSV EXPORT
+// § 6. ALERTS + PDF EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 
-// CDN NOTE: Add these two scripts to index.html (or public/index.html) before the app bundle:
-// <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-// <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+function detectAlerts(kpi, country) {
+  const alerts = [];
+  const taxTotal = kpi.impuestosTotalExacto ?? kpi.totalImpuestos ?? 0;
+  const taxPct   = kpi.ventaBruta > 0 ? taxTotal / kpi.ventaBruta : 0;
+  const adsPct   = kpi.ventaBruta > 0 && kpi.cuotaRappiAds > 0 ? kpi.cuotaRappiAds / kpi.ventaBruta : 0;
+  const compPct  = kpi.ventaBruta > 0 && kpi.compensaciones > 0 ? kpi.compensaciones / kpi.ventaBruta : 0;
 
-function exportPDF(paidlot, country) {
+  if (kpi.effectiveFee > 0.35)
+    alerts.push({ type: "danger", icon: "🚨", title: "Tarifa efectiva elevada", msg: `Tarifa efectiva ${(kpi.effectiveFee*100).toFixed(1)}% supera el umbral del 35%. Revisar certificados de exención o deducciones aplicables.` });
+  if (taxPct > 0.15)
+    alerts.push({ type: "danger", icon: "🧾", title: "Carga impositiva alta", msg: `Impuestos representan el ${(taxPct*100).toFixed(1)}% de las ventas brutas (umbral recomendado: 15%). Verificar con el contador si existen regímenes especiales.` });
+  if (compPct > 0.05)
+    alerts.push({ type: "warning", icon: "⚠️", title: "Compensaciones elevadas", msg: `Compensaciones equivalen al ${(compPct*100).toFixed(1)}% de ventas (umbral: 5%). Revisar causas: stock, tiempos de preparación o pedidos incompletos.` });
+  if (adsPct > 0.20)
+    alerts.push({ type: "warning", icon: "📺", title: "RappiAds supera el 20% de ventas", msg: `Inversión en ADS = ${(adsPct*100).toFixed(1)}% de ventas brutas. Verificar que el ROI justifique esta inversión antes de renovar.` });
+  if (kpi.hasDar && kpi.darInversionTotal > 0)
+    alerts.push({ type: "info", icon: "🎯", title: "DAR activo — emitir Nota de Crédito", msg: `Hay inversión DAR activa. Recordar al aliado emitir la NC fiscal correspondiente para optimizar la carga impositiva.` });
+  if (!kpi.hasDar && kpi.ventaBruta > 0)
+    alerts.push({ type: "info", icon: "💡", title: "Sin DAR activo — oportunidad", msg: `El aliado no tiene DAR activo este período. Activar campañas DAR aumenta la demanda sin afectar el neto.` });
+  if (!kpi.cuotaRappiAds && kpi.ventaBruta > 0)
+    alerts.push({ type: "info", icon: "📺", title: "Sin pauta RappiAds", msg: `No hay inversión en publicidad este período. Una pauta bien segmentada puede generar 3x–5x de retorno.` });
+  if (kpi.ajustesTotal > kpi.ventaBruta * 0.03)
+    alerts.push({ type: "warning", icon: "⚖️", title: "Ajustes contables significativos", msg: `Ajustes del período = ${(kpi.ajustesTotal/kpi.ventaBruta*100).toFixed(1)}% de ventas. Validar con el equipo contable si corresponden a correcciones de liquidaciones anteriores.` });
+
+  return alerts;
+}
+
+function exportPDF(paidlot, country, aiInsights = "", allSelected = []) {
   if (!paidlot) return;
   const p = paidlot;
   const kpi = p.topKpis;
   const cfg = CONFIG.countries[country] ?? CONFIG.countries["No detectado"];
   const fmtV = (v) => new Intl.NumberFormat(cfg.locale, { style: "currency", currency: cfg.currency, maximumFractionDigits: 2 }).format(v ?? 0);
+  const isMultiPeriod = allSelected.length > 1;
+  const sortedPeriods = isMultiPeriod ? [...allSelected].sort((a, b) => (a.resumen.inicio ?? "").localeCompare(b.resumen.inicio ?? "")) : [];
 
 
   // ── Derived values ────────────────────────────────────────────────────────
@@ -914,6 +939,51 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;font-size:13px;color:#0f1
 
 <div class="body">
 
+<!-- ANÁLISIS IA (si hay) -->
+${aiInsights ? `
+<div class="sec">
+  <div class="sec-title">Análisis IA · Groq Llama 3.3</div>
+  <div class="exec" style="background:linear-gradient(135deg,#eff6ff,#f0fdf4);border-color:#93c5fd">
+    <div style="font-size:10px;font-weight:800;color:#2563eb;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">🤖 Análisis generado por IA</div>
+    ${aiInsights.split("\n").filter(l => l.trim()).map(l => `<p style="margin:0 0 6px;font-size:12px;line-height:1.7;color:#1e293b">${l}</p>`).join("")}
+  </div>
+</div>` : ""}
+
+<!-- COMPARACIÓN DE PERÍODOS (multi-paidlot) -->
+${isMultiPeriod ? `
+<div class="sec">
+  <div class="sec-title">Comparación de Períodos (${sortedPeriods.length} períodos)</div>
+  <table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead>
+      <tr style="background:#f8fafc">
+        <th style="padding:8px 10px;text-align:left;font-weight:700;color:#64748b;border-bottom:1.5px solid #e2e8f0">Indicador</th>
+        ${sortedPeriods.map(sp => `<th style="padding:8px 10px;text-align:right;font-weight:700;color:#0f172a;border-bottom:1.5px solid #e2e8f0;white-space:nowrap">${sp.resumen.inicio}<br><span style="color:#94a3b8;font-weight:400">→ ${sp.resumen.fin}</span></th>`).join("")}
+        <th style="padding:8px 10px;text-align:right;font-weight:800;color:#ff441f;border-bottom:1.5px solid #e2e8f0;background:#fff7ed">Δ Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${[
+        ["Ventas Brutas",   sp => sp.topKpis.ventaBruta,                                          true],
+        ["Total a Pagar",   sp => sp.topKpis.totalAPagar ?? sp.topKpis.neto,                      true],
+        ["Comisión",        sp => sp.topKpis.comision,                                            false],
+        ["Impuestos",       sp => sp.topKpis.impuestosTotalExacto ?? sp.topKpis.totalImpuestos ?? 0, false],
+        ["Inversión DAR",   sp => sp.topKpis.darInversionTotal,                                   true],
+        ["Órdenes",         sp => sp.ordersTable.length,                                          true],
+      ].map(([label, fn, higherIsBetter], ri) => {
+        const vals = sortedPeriods.map(fn);
+        const first = vals[0], last = vals[vals.length-1];
+        const delta = typeof first === "number" && first !== 0 ? ((last - first) / Math.abs(first)) * 100 : null;
+        const color = delta === null ? "#94a3b8" : (higherIsBetter ? (delta >= 0 ? "#10b981" : "#ef4444") : (delta <= 0 ? "#10b981" : "#ef4444"));
+        return `<tr style="background:${ri%2===0?"white":"#fafafa"};border-bottom:1px solid #f1f5f9">
+          <td style="padding:7px 10px;font-weight:600;color:#475569">${label}</td>
+          ${sortedPeriods.map((sp, i) => `<td style="padding:7px 10px;text-align:right;font-weight:${i===sortedPeriods.length-1?800:400}">${typeof vals[i]==="number"&&vals[i]>1?fmtV(vals[i]):vals[i]}</td>`).join("")}
+          <td style="padding:7px 10px;text-align:right;background:#fff7ed;font-weight:800;color:${color}">${delta!==null?(delta>=0?"+":"")+delta.toFixed(1)+"%":"—"}</td>
+        </tr>`;
+      }).join("")}
+    </tbody>
+  </table>
+</div>` : ""}
+
 <!-- RESUMEN EJECUTIVO -->
 <div class="sec">
   <div class="sec-title">Resumen Ejecutivo</div>
@@ -1042,6 +1112,147 @@ async function logQueryToSheets({ aliado, pais, pregunta, respuesta }) {
     });
   } catch {}
 }
+
+// ── AutoAlertsBanner — muestra alertas automáticas del paidlot activo ─────────
+const AUTO_ALERT_COLORS = {
+  danger:  { bg: "#fef2f2", border: "#fca5a5", text: "#dc2626", badge: "#fee2e2" },
+  warning: { bg: "#fffbeb", border: "#fcd34d", text: "#d97706", badge: "#fef3c7" },
+  info:    { bg: "#eff6ff", border: "#93c5fd", text: "#2563eb", badge: "#dbeafe" },
+};
+
+const AutoAlertsBanner = memo(({ kpi, country }) => {
+  const [open, setOpen] = useState(true);
+  const alerts = useMemo(() => detectAlerts(kpi, country), [kpi, country]);
+  if (!alerts.length || !open) return null;
+  const dangers  = alerts.filter(a => a.type === "danger");
+  const warnings = alerts.filter(a => a.type === "warning");
+  const infos    = alerts.filter(a => a.type === "info");
+  return (
+    <div style={{ marginBottom: 12, borderRadius: 14, border: "1.5px solid #e2e8f0", overflow: "hidden", background: "white" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", cursor: "pointer" }} onClick={() => setOpen(v => !v)}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 16 }}>🔔</span>
+          <span style={{ fontWeight: 800, fontSize: 13, color: "#0f172a" }}>Alertas automáticas</span>
+          {dangers.length  > 0 && <span style={{ background: "#fee2e2", color: "#dc2626", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20 }}>{dangers.length} crítica{dangers.length > 1 ? "s" : ""}</span>}
+          {warnings.length > 0 && <span style={{ background: "#fef3c7", color: "#d97706", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20 }}>{warnings.length} alerta{warnings.length > 1 ? "s" : ""}</span>}
+          {infos.length    > 0 && <span style={{ background: "#dbeafe", color: "#2563eb", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20 }}>{infos.length} oportunidad{infos.length > 1 ? "es" : ""}</span>}
+        </div>
+        <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{open ? "▲ Ocultar" : "▼ Ver"}</span>
+      </div>
+      {open && (
+        <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {alerts.map((a, i) => {
+            const c = AUTO_ALERT_COLORS[a.type];
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px" }}>
+                <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{a.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: c.text, marginBottom: 2 }}>{a.title}</div>
+                  <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.6 }}>{a.msg}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ── ComparisonPanel — tabla de KPIs comparando múltiples períodos ─────────────
+const ComparisonPanel = memo(({ paidlots, country }) => {
+  if (paidlots.length < 2) return null;
+  const cfg = CONFIG.countries[country] ?? CONFIG.countries["No detectado"];
+  const fmtV = (v) => { try { return new Intl.NumberFormat(cfg.locale, { style: "currency", currency: cfg.currency, maximumFractionDigits: 0 }).format(v ?? 0); } catch { return (v ?? 0).toFixed(0); } };
+  const pct = (v) => `${(v * 100).toFixed(1)}%`;
+
+  const sorted = [...paidlots].sort((a, b) => (a.resumen.inicio ?? "").localeCompare(b.resumen.inicio ?? ""));
+  const base = sorted[0];
+
+  const rows = [
+    { label: "Ventas Brutas",      key: p => p.topKpis.ventaBruta,                          fmt: fmtV },
+    { label: "Total a Pagar",      key: p => p.topKpis.totalAPagar ?? p.topKpis.neto,        fmt: fmtV },
+    { label: "Comisión",           key: p => p.topKpis.comision,                             fmt: fmtV },
+    { label: "Impuestos",          key: p => p.topKpis.impuestosTotalExacto ?? p.topKpis.totalImpuestos ?? 0, fmt: fmtV },
+    { label: "Tarifa Efectiva",    key: p => p.topKpis.effectiveFee,                         fmt: pct },
+    { label: "Inversión DAR",      key: p => p.topKpis.darInversionTotal,                    fmt: fmtV },
+    { label: "Cuota RappiAds",     key: p => p.topKpis.cuotaRappiAds ?? 0,                   fmt: fmtV },
+    { label: "Compensaciones",     key: p => p.topKpis.compensaciones,                       fmt: fmtV },
+    { label: "Órdenes",            key: p => p.ordersTable.length,                            fmt: v => v },
+  ];
+
+  // Totals row
+  const totals = {
+    ventas:    sorted.reduce((s, p) => s + (p.topKpis.ventaBruta ?? 0), 0),
+    neto:      sorted.reduce((s, p) => s + (p.topKpis.totalAPagar ?? p.topKpis.neto ?? 0), 0),
+    ordenes:   sorted.reduce((s, p) => s + p.ordersTable.length, 0),
+  };
+
+  return (
+    <div style={{ background: "white", borderRadius: 14, border: "1.5px solid #e2e8f0", overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ padding: "12px 16px", background: "linear-gradient(135deg,#fff7ed,#fffbf5)", borderBottom: "1px solid #fed7aa", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>📊</span>
+          <span style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>Comparación de períodos</span>
+          <span style={{ fontSize: 11, color: "#94a3b8" }}>{sorted.length} períodos seleccionados</span>
+        </div>
+        <div style={{ fontSize: 12, color: "#64748b" }}>
+          Total consolidado: <strong style={{ color: "#ff441f" }}>{fmtV(totals.ventas)}</strong> ventas · <strong style={{ color: "#10b981" }}>{fmtV(totals.neto)}</strong> a pagar · <strong>{totals.ordenes}</strong> órdenes
+        </div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: 11, borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>Indicador</th>
+              {sorted.map(p => (
+                <th key={p.id} style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "#0f172a", fontSize: 11, borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>
+                  {p.resumen.inicio}<br /><span style={{ fontWeight: 500, color: "#94a3b8" }}>→ {p.resumen.fin}</span>
+                </th>
+              ))}
+              <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 800, color: "#ff441f", fontSize: 11, borderBottom: "1px solid #e2e8f0", background: "#fff7ed", whiteSpace: "nowrap" }}>Δ vs anterior</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri} style={{ borderBottom: "1px solid #f1f5f9", background: ri % 2 === 0 ? "white" : "#fafafa" }}>
+                <td style={{ padding: "9px 16px", fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>{row.label}</td>
+                {sorted.map((p, pi) => {
+                  const val = row.key(p);
+                  const prev = pi > 0 ? row.key(sorted[pi - 1]) : null;
+                  const delta = prev !== null && typeof val === "number" && typeof prev === "number" ? val - prev : null;
+                  const isGood = delta !== null && (row.label === "Total a Pagar" || row.label === "Ventas Brutas" || row.label === "Órdenes" || row.label === "Inversión DAR") ? delta > 0 : delta !== null ? delta < 0 : null;
+                  return (
+                    <td key={p.id} style={{ padding: "9px 14px", textAlign: "right", fontWeight: pi === sorted.length - 1 ? 800 : 500, color: "#0f172a" }}>
+                      {row.fmt(val)}
+                      {delta !== null && pi === sorted.length - 1 && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: isGood ? "#10b981" : "#ef4444" }}>
+                          {delta > 0 ? "▲" : "▼"} {typeof delta === "number" && Math.abs(delta) > 1 ? row.fmt(Math.abs(delta)) : ""}
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+                <td style={{ padding: "9px 14px", textAlign: "right", background: "#fff7ed" }}>
+                  {(() => {
+                    const last = row.key(sorted[sorted.length - 1]);
+                    const first = row.key(sorted[0]);
+                    if (typeof last !== "number" || typeof first !== "number" || first === 0) return <span style={{ color: "#94a3b8" }}>—</span>;
+                    const chg = ((last - first) / Math.abs(first)) * 100;
+                    const isPos = chg > 0;
+                    const goodLabel = row.label === "Total a Pagar" || row.label === "Ventas Brutas" || row.label === "Órdenes" || row.label === "Inversión DAR";
+                    const color = goodLabel ? (isPos ? "#10b981" : "#ef4444") : (isPos ? "#ef4444" : "#10b981");
+                    return <span style={{ fontWeight: 800, color }}>{isPos ? "+" : ""}{chg.toFixed(1)}%</span>;
+                  })()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // § 7. UI COMPONENTS
@@ -2658,9 +2869,48 @@ const ObjecionesPanel = memo(({ objections, search }) => {
   );
 });
 
-// ── KnowledgeCenterModal — 8 tabs: 6 edu + CONSULTAR + OBJECIONES ─────────────
-const KC_TABS = [...EDUCATION_TABS, "CONSULTAR", "OBJECIONES"];
-const KC_ICONS = { DAR:"🎯", ADS:"📺", IMPUESTOS:"🧾", COMPENSACIONES:"🔄", CONCEPTOS:"📖", "FÓRMULAS":"🔢", CONSULTAR:"🔍", OBJECIONES:"⚡" };
+// ── KnowledgeCenterModal — 9 tabs: 6 edu + PAGOS + CONSULTAR + OBJECIONES ────
+const KC_TABS = [...EDUCATION_TABS, "PAGOS", "CONSULTAR", "OBJECIONES"];
+const KC_ICONS = { DAR:"🎯", ADS:"📺", IMPUESTOS:"🧾", COMPENSACIONES:"🔄", CONCEPTOS:"📖", "FÓRMULAS":"🔢", PAGOS:"💳", CONSULTAR:"🔍", OBJECIONES:"⚡" };
+
+const PAGOS_FAQ = [
+  { q: "¿Cuándo me pagan? ¿Cuáles son los períodos de pago?", a: "Rappi tiene diferentes frecuencias de pago según el contrato del aliado:\n\n• **Semanal** — el período cierra el domingo a medianoche. El paidlot se genera el lunes y el depósito llega en 1–3 días hábiles.\n• **Quincenal** — cierres el día 15 y el último día del mes.\n• **Mensual** — cierre el último día del mes.\n\nLa fecha exacta de depósito aparece en el campo 'Fecha de Pago' en el encabezado de tu paidlot." },
+  { q: "¿Por qué mi pago es diferente al que calculé?", a: "Los factores que más generan diferencias entre el cálculo propio y el paidlot son:\n\n1. **RappiAds en semana vencida** — se descuenta la pauta de la semana ANTERIOR, no la del período actual.\n2. **Compensaciones** — devoluciones por pedidos con incidencias.\n3. **Deuda períodos anteriores** — saldo pendiente de liquidaciones previas.\n4. **Ajustes manuales** — correcciones aplicadas por el equipo de Finanzas.\n5. **Impuestos** — retenciones según el país y categoría fiscal.\n\nRevisa la pestaña 'Conciliación' del paidlot para ver el desglose exacto." },
+  { q: "¿Qué hacer si no recibí el pago en la fecha indicada?", a: "Verifica primero:\n\n1. **Datos bancarios** — confirmar que el CBU/IBAN/cuenta registrada en el Portal de Aliados esté actualizada y sin errores tipográficos.\n2. **Documentación fiscal** — algunos países requieren que la factura/comprobante esté enviado antes del depósito.\n3. **Retención bancaria** — algunos bancos tardan 1–2 días hábiles adicionales en acreditar transferencias externas.\n\nSi la fecha de pago ya pasó hace más de 3 días hábiles, contactar a soporte de Rappi con el número de paidlot." },
+  { q: "¿Qué es el 'Total a Pagar' y cómo se calcula?", a: "El Total a Pagar es el neto que Rappi deposita al aliado:\n\nVenta Bruta\n− Descuentos de producto asumidos por el aliado\n− Costo de domicilio y propinas\n− Comisión de plataforma\n− Impuestos del período\n− Compensaciones\n− RappiAds y otras tarifas\n± Ajustes manuales\n± Deuda períodos anteriores\n= **Total a Pagar**\n\nEl DAR (Descuento Asumido por Rappi) aparece en el paidlot pero se neutraliza con un descuento equivalente en comisión — NO afecta el neto." },
+  { q: "¿Qué es la 'Deuda Períodos Anteriores'?", a: "Es un saldo negativo arrastrado de un paidlot anterior donde el aliado quedó en deuda con Rappi (por ejemplo, si las compensaciones y devoluciones superaron las ventas del período).\n\nEste monto se descuenta del paidlot actual hasta saldar la deuda. El aliado puede ver el detalle de qué período originó la deuda en la columna 'Descripción' del paidlot." },
+  { q: "¿Cómo actualizar los datos bancarios para recibir el pago?", a: "Los datos bancarios se actualizan en el **Portal de Aliados (Partners)**:\n\n1. Ingresar a partners.rappi.com\n2. Ir a **Mi negocio → Datos Bancarios**\n3. Actualizar CBU/CCI/CLABE/IBAN según el país\n4. El cambio puede tardar 1–2 períodos en aplicar\n\nImportante: Rappi nunca solicitará datos bancarios por WhatsApp o correo electrónico. Cualquier solicitud de este tipo es un intento de fraude." },
+  { q: "¿Qué son los 'Ajustes Manuales' en el paidlot?", a: "Los ajustes manuales son correcciones realizadas por el equipo de Finanzas de Rappi. Pueden ser:\n\n• **Positivos (+)** — devolución de un cobro incorrecto de períodos anteriores, bonificación especial, etc.\n• **Negativos (−)** — corrección de un pago en exceso del período anterior.\n\nCada ajuste tiene una descripción y fecha de referencia. Si el ajuste es significativo y no lo reconoces, solicita el detalle a soporte indicando el número de paidlot." },
+  { q: "¿Cómo afectan los pedidos cancelados al pago?", a: "Los pedidos cancelados generan compensaciones en el paidlot según la causa:\n\n• **Cancelado por la tienda** → el aliado asume el costo.\n• **Cancelado por el usuario** después de preparado → Rappi evalúa caso a caso.\n• **Cancelado por el repartidor** o problemas técnicos → generalmente Rappi asume el costo.\n\nCada compensación tiene un Reason Code que indica quién asumió el costo. Puedes verlos en la sección 'Compensaciones' del paidlot." },
+];
+
+const PagosPanel = memo(({ search }) => {
+  const [open, setOpen] = useState(null);
+  const filtered = search ? PAGOS_FAQ.filter(f => f.q.toLowerCase().includes(search.toLowerCase()) || f.a.toLowerCase().includes(search.toLowerCase())) : PAGOS_FAQ;
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16, padding: "10px 14px", background: "#f0fdf4", borderRadius: 10, border: "1px solid #bbf7d0" }}>
+        💳 <strong>Guía de pagos y liquidaciones</strong> — Respuestas a las preguntas más frecuentes sobre el proceso de pago de Rappi.
+      </div>
+      {filtered.length === 0 && <div style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0", fontSize: 13 }}>Sin resultados para "{search}"</div>}
+      {filtered.map((f, i) => (
+        <div key={i} style={{ marginBottom: 10, borderRadius: 12, border: "1.5px solid #e2e8f0", overflow: "hidden" }}>
+          <div onClick={() => setOpen(open === i ? null : i)} style={{ background: open === i ? "#f0fdf4" : "#f8fafc", padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>💳 {f.q}</div>
+            <span style={{ fontSize: 13, color: "#94a3b8", flexShrink: 0 }}>{open === i ? "▲" : "▼"}</span>
+          </div>
+          {open === i && (
+            <div style={{ padding: "14px 16px", borderTop: "1px solid #e2e8f0", background: "white" }}>
+              {f.a.split("\n").map((line, j) => (
+                <p key={j} style={{ fontSize: 12, color: "#374151", lineHeight: 1.75, margin: "0 0 4px" }}>{line || " "}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+});
 
 const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onClose, initialTab = "DAR", onHighlightSection, onHighlightTab }) => {
   const [tab, setTab] = useState(initialTab);
@@ -2722,6 +2972,9 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
             <EducationHub country={country} topKpis={topKpis} embedded={true} embeddedTab={tab} />
           )}
 
+          {/* Pagos FAQ */}
+          {tab === "PAGOS" && <PagosPanel search={search} />}
+
           {/* Consultar — full DoubtAssistant inline */}
           {tab === "CONSULTAR" && (
             <div style={{ maxWidth: 680 }}>
@@ -2773,6 +3026,7 @@ export default function RappiPaidlotAuditorPro() {
   const [hubOpen, setHubOpen] = useState(true);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [knowledgeTab, setKnowledgeTab] = useState("DAR");
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const handleHighlightSection = useCallback((sectionKey) => {
     const groupMap = { impuestos: "impuestos", compensaciones: "compensaciones", dar: "dar", plataforma: "plataforma", ordenes: "ventas", ajustes: "ajustes" };
@@ -2821,6 +3075,48 @@ export default function RappiPaidlotAuditorPro() {
     }
     setLoading(false);
   }, [paidlots]);
+
+  const handleExportPDF = useCallback(async () => {
+    if (!activePaidlot) return;
+    const country = activeCountry;
+    const cfg = CONFIG.countries[country] ?? CONFIG.countries["No detectado"];
+    const fmtV = (v) => { try { return new Intl.NumberFormat(cfg.locale, { style: "currency", currency: cfg.currency, maximumFractionDigits: 0 }).format(v ?? 0); } catch { return String(v ?? 0); } };
+
+    setPdfLoading(true);
+    let aiInsights = "";
+    try {
+      const groqKey = import.meta.env.VITE_GROQ_API_KEY ?? "";
+      // Build context for all selected paidlots
+      const periodsData = selectedPaidlots.map(p => {
+        const kpi = p.topKpis;
+        const tax = kpi.impuestosTotalExacto ?? kpi.totalImpuestos ?? 0;
+        return `Período: ${p.resumen.inicio} → ${p.resumen.fin} | Ventas: ${fmtV(kpi.ventaBruta)} | Total a Pagar: ${fmtV(kpi.totalAPagar ?? kpi.neto)} | Comisión: ${fmtV(kpi.comision)} | Impuestos: ${fmtV(tax)} (${kpi.ventaBruta > 0 ? ((tax/kpi.ventaBruta)*100).toFixed(1) : 0}%) | Tarifa efectiva: ${(kpi.effectiveFee*100).toFixed(1)}% | DAR activo: ${kpi.hasDar ? "Sí (" + fmtV(kpi.darInversionTotal) + ")" : "No"} | RappiAds: ${fmtV(kpi.cuotaRappiAds ?? 0)} | Compensaciones: ${fmtV(kpi.compensaciones)} | Órdenes: ${p.ordersTable.length}`;
+      }).join("\n");
+
+      const prompt = selectedPaidlots.length > 1
+        ? `Analiza el desempeño financiero de ${selectedPaidlots[0].meta.tienda} en ${country} durante ${selectedPaidlots.length} períodos:\n\n${periodsData}\n\nEntrega:\n1. Resumen ejecutivo en 3 oraciones sobre el desempeño general y tendencia.\n2. 3 insights clave sobre cambios entre períodos.\n3. 2 acciones concretas prioritarias basadas en los datos.\n\nResponde en español, sin markdown, sin listas con guiones. Máximo 250 palabras.`
+        : `Analiza el paidlot de ${selectedPaidlots[0].meta.tienda} en ${country}:\n\n${periodsData}\n\nEntrega:\n1. Resumen ejecutivo en 2 oraciones.\n2. 2 insights clave del período.\n3. 1 acción concreta prioritaria.\n\nResponde en español, sin markdown. Máximo 150 palabras.`;
+
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "system", content: "Eres un analista financiero experto en aliados de Rappi en Latinoamérica. Responde siempre en español, de forma concisa y orientada a la acción." },
+            { role: "user", content: prompt }
+          ],
+          max_tokens: 400, temperature: 0.4,
+        }),
+      });
+      const data = await res.json();
+      aiInsights = data.choices?.[0]?.message?.content ?? "";
+    } catch (err) {
+      aiInsights = "";
+    }
+    setPdfLoading(false);
+    exportPDF(activePaidlot, country, aiInsights, selectedPaidlots);
+  }, [activePaidlot, activeCountry, selectedPaidlots]);
 
   const confirmCountry = useCallback(() => {
     if (!countryModal) return;
@@ -2940,7 +3236,9 @@ export default function RappiPaidlotAuditorPro() {
           )}
           {selectedPaidlots.length > 0 && (
             exportOk.ok
-              ? <button onClick={() => exportPDF(activePaidlot, activeCountry)} style={{ background: "#1d4ed8", color: "white", border: "none", borderRadius: 8, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>📄 Informe PDF</button>
+              ? <button onClick={handleExportPDF} disabled={pdfLoading} style={{ background: pdfLoading ? "#93c5fd" : "#1d4ed8", color: "white", border: "none", borderRadius: 8, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: pdfLoading ? "wait" : "pointer", minWidth: 130 }}>
+                  {pdfLoading ? "⏳ Generando IA…" : `📄 Informe PDF${selectedPaidlots.length > 1 ? ` (${selectedPaidlots.length} períodos)` : ""}`}
+                </button>
               : <Tooltip text={exportOk.msg}><div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "#dc2626", fontWeight: 600 }}>🚫 {selectedPaidlots.length} sel.</div></Tooltip>
           )}
           <label style={{ background: "linear-gradient(135deg,#ff441f,#ff6b47)", color: "white", borderRadius: 9, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -3029,10 +3327,14 @@ export default function RappiPaidlotAuditorPro() {
 
               {/* ── Alerts (below sticky bar) ── */}
               <div style={{ marginTop: 12 }}>
+                <AutoAlertsBanner kpi={p.topKpis} country={activeCountry} />
                 <DarZeroAlert kpis={p.topKpis} tienda={p.meta.tienda} />
                 <DarKpiPanel kpis={p.topKpis} country={activeCountry} />
                 <AdsAlertBanner kpis={p.topKpis} country={activeCountry} />
               </div>
+
+              {/* ── Comparación de períodos (cuando hay múltiples seleccionados) ── */}
+              {selectedPaidlots.length >= 2 && <ComparisonPanel paidlots={selectedPaidlots} country={activeCountry} />}
 
               {/* ── TWO-COLUMN LAYOUT: sections left + EducationHub right ── */}
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 350px", gap: 20, alignItems: "start", marginTop: 16 }}>
