@@ -2013,6 +2013,71 @@ const DOUBT_EXAMPLES = [
   "¿Cuánto fue mi comisión de plataforma este período?",
 ];
 
+const QUICK_QUESTIONS = [
+  {
+    cat: "Pagos",
+    color: "#10b981", bg: "#f0fdf4", border: "#86efac",
+    questions: [
+      "¿Cuánto fue mi total a pagar este período?",
+      "¿Por qué el pago es diferente al que calculé?",
+      "¿Cuándo llega el depósito a mi cuenta?",
+      "¿Qué es la deuda de períodos anteriores?",
+    ],
+  },
+  {
+    cat: "DAR",
+    color: "#f97316", bg: "#fff7ed", border: "#fb923c",
+    questions: [
+      "¿Qué es el DAR y por qué aparece en mi paidlot?",
+      "¿El DAR me reduce el pago?",
+      "¿Tengo que emitir una nota crédito por el DAR?",
+      "¿Cómo sé cuánto invirtió Rappi en DAR para mí?",
+    ],
+  },
+  {
+    cat: "Impuestos",
+    color: "#0ea5e9", bg: "#f0f9ff", border: "#7dd3fc",
+    questions: [
+      "¿Por qué hay impuestos en mi liquidación?",
+      "¿Qué es la percepción / retención que me cobran?",
+      "¿Cómo bajo mi carga impositiva?",
+      "¿Los impuestos me los descuenta Rappi o los pago yo?",
+    ],
+  },
+  {
+    cat: "Comisión",
+    color: "#ef4444", bg: "#fef2f2", border: "#fca5a5",
+    questions: [
+      "¿Cuánto fue mi comisión de plataforma?",
+      "¿Por qué mi tarifa efectiva es tan alta?",
+      "¿En qué se diferencia la comisión de los impuestos?",
+      "¿Qué incluye el cobro de 'Uso y alquiler de plataforma'?",
+    ],
+  },
+  {
+    cat: "Compensaciones",
+    color: "#8b5cf6", bg: "#f5f3ff", border: "#c4b5fd",
+    questions: [
+      "¿Por qué me cobran compensaciones?",
+      "¿Puedo reclamar una compensación que creo incorrecta?",
+      "¿Cuál es la diferencia entre compensación y cancelación?",
+      "¿Qué significa el Reason de la compensación?",
+    ],
+  },
+  {
+    cat: "RappiAds",
+    color: "#7c3aed", bg: "#faf5ff", border: "#d8b4fe",
+    questions: [
+      "¿Por qué me cobran ADS si no tuve campaña este período?",
+      "¿Cómo calculo el ROI de mi pauta en RappiAds?",
+      "¿Cuánto debo invertir en ADS para que sea rentable?",
+      "¿Qué es la facturación en semana vencida?",
+    ],
+  },
+];
+
+const CHAT_LS_KEY = (tiendaId) => `rappi_chat_v1_${tiendaId}`;
+
 // Keyword → section mapping. Each entry: keywords that trigger the section,
 // the section tab key to highlight, a human label, and the farmer script template.
 const SECTION_MAP = [
@@ -2148,10 +2213,37 @@ const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [localResolved, setLocalResolved] = useState(false);
-  const [aiLog, setAiLog] = useState([]); // persists all Q&A for PDF export
-  const [externalTerm, setExternalTerm] = useState(null); // fiscal term for Google search
+  const [externalTerm, setExternalTerm] = useState(null);
   const textareaRef = useRef(null);
   const [trend, setTrend] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [quickCat, setQuickCat] = useState(null);
+
+  // ── Persisted chat history per store ────────────────────────────────────────
+  const tiendaId = paidlot?.meta?.tiendaId ?? "unknown";
+  const [chatHistory, setChatHistory] = useState(() => {
+    try { const r = localStorage.getItem(CHAT_LS_KEY(tiendaId)); return r ? JSON.parse(r) : []; } catch { return []; }
+  });
+
+  useEffect(() => {
+    try { const r = localStorage.getItem(CHAT_LS_KEY(tiendaId)); setChatHistory(r ? JSON.parse(r) : []); } catch { setChatHistory([]); }
+  }, [tiendaId]);
+
+  const addToHistory = useCallback((q, a) => {
+    setChatHistory(prev => {
+      const next = [{ q, a, ts: new Date().toLocaleString("es", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }), paidlotId: paidlot?.meta?.paidlotId }, ...prev].slice(0, 30);
+      try { localStorage.setItem(CHAT_LS_KEY(tiendaId), JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [tiendaId, paidlot]);
+
+  const clearHistory = useCallback(() => {
+    setChatHistory([]);
+    try { localStorage.removeItem(CHAT_LS_KEY(tiendaId)); } catch {}
+  }, [tiendaId]);
+
+  // legacy aiLog kept for compat
+  const [aiLog, setAiLog] = useState([]);
 
   // ── buildPreSearch: deterministic resolution BEFORE calling the API ─────────
   // Returns { resolved: true, text, scriptText } if found locally, else null.
@@ -2387,7 +2479,7 @@ INSTRUCCIONES
       setResult(text);
       setScript(playbook_script);
       setExternalTerm("Reason " + reasonId + " " + r.name + " " + country);
-      setAiLog(prev => [...prev, { q, a: text, ts: new Date().toLocaleTimeString() }]);
+      setAiLog(prev => [...prev, { q, a: text, ts: new Date().toLocaleTimeString() }]); addToHistory(q, text);
       logQueryToSheets({ aliado: paidlot.meta.tienda, pais: country, pregunta: q, respuesta: text });
       setLoading(false);
       return;
@@ -2414,7 +2506,7 @@ INSTRUCCIONES
         setResult(diagText);
         setScript(cert_script);
         setExternalTerm("certificado exención impuestos Rappi aliados " + country);
-        setAiLog(prev => [...prev, { q, a: diagText, ts: new Date().toLocaleTimeString() }]);
+        setAiLog(prev => [...prev, { q, a: diagText, ts: new Date().toLocaleTimeString() }]); addToHistory(q, diagText);
         logQueryToSheets({ aliado: paidlot.meta.tienda, pais: country, pregunta: q, respuesta: diagText });
         setLoading(false);
         return;
@@ -2475,7 +2567,7 @@ INSTRUCCIONES
       setResult(text);
       if (sec) setScript(sec.farmerScript(paidlot, country, text));
 
-      setAiLog(prev => [...prev, { q, a: text, ts: new Date().toLocaleTimeString() }]);
+      setAiLog(prev => [...prev, { q, a: text, ts: new Date().toLocaleTimeString() }]); addToHistory(q, text);
       logQueryToSheets({ aliado: paidlot.meta.tienda, pais: country, pregunta: q, respuesta: text });
 
     } catch (err) {
@@ -2490,7 +2582,7 @@ INSTRUCCIONES
     } finally {
       setLoading(false);
     }
-  }, [query, buildContext, buildPreSearch, paidlot, country, onHighlightSection, onHighlightTab]);
+  }, [query, buildContext, buildPreSearch, paidlot, country, onHighlightSection, onHighlightTab, addToHistory]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSearch();
@@ -2629,15 +2721,63 @@ INSTRUCCIONES
                 );
               })()}
 
-              {/* Examples */}
+              {/* ── Historial de conversación por marca ─────────────────── */}
+              {chatHistory.length > 0 && (
+                <div style={{ marginBottom: 14, borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                  <div onClick={() => setHistoryOpen(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", background: "#f8fafc", cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <span style={{ fontSize: 14 }}>🕐</span>
+                      <span style={{ fontWeight: 700, fontSize: 12, color: "#475569" }}>Historial — {paidlot.meta.tienda}</span>
+                      <span style={{ fontSize: 10, background: "#e0f2fe", color: "#0369a1", fontWeight: 700, padding: "1px 7px", borderRadius: 20 }}>{chatHistory.length} consulta{chatHistory.length > 1 ? "s" : ""}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button onClick={e => { e.stopPropagation(); clearHistory(); }} style={{ fontSize: 10, color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Limpiar</button>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>{historyOpen ? "▲" : "▼"}</span>
+                    </div>
+                  </div>
+                  {historyOpen && (
+                    <div style={{ maxHeight: 280, overflowY: "auto" }}>
+                      {chatHistory.map((h, i) => (
+                        <div key={i} style={{ padding: "10px 14px", borderTop: "1px solid #f1f5f9", background: i % 2 === 0 ? "white" : "#fafafa" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#ff441f", flex: 1 }}>❓ {h.q}</div>
+                            <span style={{ fontSize: 10, color: "#94a3b8", flexShrink: 0 }}>{h.ts}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.6 }}>{h.a.slice(0, 180)}{h.a.length > 180 ? "…" : ""}</div>
+                          <button onClick={() => { setQuery(h.q); setTimeout(() => handleSearch(h.q), 50); }} style={{ marginTop: 5, fontSize: 10, color: "#1d4ed8", background: "none", border: "none", cursor: "pointer", fontWeight: 600, padding: 0 }}>↩ Repetir consulta</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Preguntas rápidas por categoría ─────────────────────────── */}
               {!result && !loading && (
                 <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Preguntas frecuentes del aliado</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {DOUBT_EXAMPLES.map(ex => (
-                      <button key={ex} onClick={() => setQuery(ex)} style={{ fontSize: 11, padding: "5px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 20, cursor: "pointer", color: "#475569", textAlign: "left" }}>{ex}</button>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Preguntas rápidas</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                    {QUICK_QUESTIONS.map(cat => (
+                      <button key={cat.cat} onClick={() => setQuickCat(quickCat === cat.cat ? null : cat.cat)}
+                        style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 20, border: `1.5px solid ${quickCat === cat.cat ? cat.color : cat.border}`, background: quickCat === cat.cat ? cat.bg : "white", color: quickCat === cat.cat ? cat.color : "#64748b", cursor: "pointer", transition: "all 0.15s" }}>
+                        {cat.cat}
+                      </button>
                     ))}
                   </div>
+                  {quickCat && (() => {
+                    const catData = QUICK_QUESTIONS.find(c => c.cat === quickCat);
+                    if (!catData) return null;
+                    return (
+                      <div style={{ background: catData.bg, border: `1.5px solid ${catData.border}`, borderRadius: 12, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 5 }}>
+                        {catData.questions.map(q => (
+                          <button key={q} onClick={() => { setQuery(q); setQuickCat(null); setTimeout(() => handleSearch(q), 50); }}
+                            style={{ textAlign: "left", fontSize: 12, padding: "7px 12px", background: "white", border: `1px solid ${catData.border}`, borderRadius: 8, cursor: "pointer", color: "#1e293b", fontWeight: 500, lineHeight: 1.4 }}>
+                            → {q}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
