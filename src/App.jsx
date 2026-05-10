@@ -834,7 +834,7 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;font-size:13px;color:#0f1
 .hdr{background:linear-gradient(135deg,#ff441f 0%,#ff6b47 55%,#c2410c 100%);padding:36px 44px 32px;color:white;position:relative;overflow:hidden}
 .hdr::after{content:'';position:absolute;top:-60px;right:-60px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,0.05);pointer-events:none}
 .hdr-top{display:flex;align-items:center;gap:14px;margin-bottom:22px}
-.hdr-mark{width:48px;height:48px;border-radius:12px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:24px;border:2px solid rgba(255,255,255,0.28);flex-shrink:0}
+.hdr-mark{height:48px;border-radius:12px;background:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 12px;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
 .hdr-brand{font-size:11px;font-weight:800;opacity:.8;letter-spacing:.1em;text-transform:uppercase}
 .hdr h1{font-size:28px;font-weight:900;letter-spacing:-0.02em;line-height:1.1;margin-bottom:10px}
 .hdr-meta{font-size:12px;opacity:.85;line-height:2.1}
@@ -916,7 +916,7 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;font-size:13px;color:#0f1
 <!-- HEADER -->
 <div class="hdr">
   <div class="hdr-top">
-    <div class="hdr-mark">R</div>
+    <div class="hdr-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 44" width="104" height="34"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#ff441f"/><stop offset="100%" stop-color="#ff6b35"/></linearGradient></defs><text x="2" y="36" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="38" fill="url(#rg)" letter-spacing="-1">rappi</text></svg></div>
     <div class="hdr-brand">Rappi Paidlot Auditor Pro</div>
   </div>
   <h1>${pdfSafe(p.meta.tienda)}</h1>
