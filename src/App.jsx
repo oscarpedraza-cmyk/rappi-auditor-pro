@@ -762,6 +762,18 @@ function exportPDF(paidlot, country, aiInsights = "", allSelected = []) {
   const isMultiPeriod = allSelected.length > 1;
   const sortedPeriods = isMultiPeriod ? [...allSelected].sort((a, b) => (a.resumen.inicio ?? "").localeCompare(b.resumen.inicio ?? "")) : [];
 
+  // ── Aggregated multi-period totals (para narrativa del farmer) ────────────
+  const multiTotals = isMultiPeriod ? {
+    ventaBruta:   sortedPeriods.reduce((s, sp) => s + (sp.topKpis.ventaBruta ?? 0), 0),
+    totalAPagar:  sortedPeriods.reduce((s, sp) => s + (sp.topKpis.totalAPagar ?? sp.topKpis.neto ?? 0), 0),
+    comision:     sortedPeriods.reduce((s, sp) => s + (sp.topKpis.comision ?? 0), 0),
+    impuestos:    sortedPeriods.reduce((s, sp) => s + (sp.topKpis.impuestosTotalExacto ?? sp.topKpis.totalImpuestos ?? 0), 0),
+    ordenes:      sortedPeriods.reduce((s, sp) => s + sp.ordersTable.length, 0),
+    darInversion: sortedPeriods.reduce((s, sp) => s + (sp.topKpis.darInversionTotal ?? 0), 0),
+    ads:          sortedPeriods.reduce((s, sp) => s + (sp.topKpis.cuotaRappiAds ?? 0), 0),
+    inicio:       sortedPeriods[0].resumen.inicio,
+    fin:          sortedPeriods[sortedPeriods.length - 1].resumen.fin,
+  } : null;
 
   // ── Derived values ────────────────────────────────────────────────────────
   const totalAPagar   = kpi.totalAPagar ?? kpi.neto;
@@ -910,8 +922,19 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;font-size:13px;color:#0f1
   .kpi-grid{grid-template-columns:repeat(4,1fr)}
   .sec{margin-top:24px}
 }
+.internal-banner{background:#1e293b;color:white;padding:10px 28px;display:flex;align-items:center;gap:12px;font-size:11px;border-bottom:3px solid #ff441f}
+.internal-banner .ib-badge{background:#ff441f;color:white;font-weight:900;font-size:10px;padding:3px 10px;border-radius:4px;white-space:nowrap;letter-spacing:.04em;flex-shrink:0}
+.internal-banner .ib-text{font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.internal-banner .ib-sub{color:#94a3b8;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0;margin-left:8px}
+@media print{.internal-banner{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
 <div class="page">
+
+<!-- BANNER INTERNO — NO ENVIAR AL ALIADO -->
+<div class="internal-banner">
+  <span class="ib-badge">⚠ USO INTERNO</span>
+  <span class="ib-text">NO ENVIAR ESTE DOCUMENTO AL ALIADO — NO ES UN DOCUMENTO OFICIAL RAPPI<span class="ib-sub">Exclusivo para análisis interno del farmer · No compartir con el aliado</span></span>
+</div>
 
 <!-- HEADER -->
 <div class="hdr">
@@ -938,6 +961,34 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;font-size:13px;color:#0f1
 </div>
 
 <div class="body">
+
+<!-- NOTAS PARA EL FARMER -->
+<div class="sec" style="margin-top:20px">
+  <div class="sec-title" style="display:flex;align-items:center;gap:8px">
+    📋 Notas para el Farmer
+    <span style="background:#1e293b;color:white;font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px;letter-spacing:.05em">USO INTERNO</span>
+  </div>
+  <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:16px 20px;font-size:12px;line-height:1.8;color:#334155">
+    ${isMultiPeriod ? `
+    <p style="margin:0 0 10px"><strong>Análisis consolidado de ${sortedPeriods.length} períodos consecutivos</strong> — ${pdfSafe(p.meta.tienda)} &nbsp;·&nbsp; ${cfg.flag ?? ""} ${country}</p>
+    <p style="margin:0 0 8px">Este informe cubre desde <strong>${multiTotals.inicio}</strong> hasta <strong>${multiTotals.fin}</strong>, sumando un total de <strong>${sortedPeriods.length} liquidaciones</strong> del mismo aliado. Se pueden analizar como un único período comercial para evaluar el desempeño mensual o quincenal completo.</p>
+    <table style="width:100%;border-collapse:collapse;margin:10px 0;font-size:12px">
+      <tr style="background:#fff"><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:600;color:#475569;width:40%">Ventas brutas totales</td><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:800;color:#0f172a">${fmtV(multiTotals.ventaBruta)}</td></tr>
+      <tr style="background:#f8fafc"><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Total a pagar al aliado</td><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:800;color:#16a34a">${fmtV(multiTotals.totalAPagar)}</td></tr>
+      <tr style="background:#fff"><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Comisión total</td><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:400;color:#0f172a">${fmtV(multiTotals.comision)}</td></tr>
+      <tr style="background:#f8fafc"><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Impuestos totales</td><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:400;color:#0f172a">${fmtV(multiTotals.impuestos)} (${multiTotals.ventaBruta > 0 ? ((multiTotals.impuestos/multiTotals.ventaBruta)*100).toFixed(1) : 0}% s/ventas)</td></tr>
+      <tr style="background:#fff"><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Inversión DAR total</td><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:400;color:#0f172a">${multiTotals.darInversion > 0 ? fmtV(multiTotals.darInversion) : "Sin DAR activo"}</td></tr>
+      <tr style="background:#f8fafc"><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:600;color:#475569">RappiAds total</td><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:400;color:#0f172a">${multiTotals.ads > 0 ? fmtV(multiTotals.ads) : "Sin inversión"}</td></tr>
+      <tr style="background:#fff"><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Órdenes totales</td><td style="padding:5px 10px;border:1px solid #e2e8f0;font-weight:400;color:#0f172a">${multiTotals.ordenes} órdenes en ${sortedPeriods.length} períodos</td></tr>
+    </table>
+    <p style="margin:8px 0 0;font-size:11px;color:#64748b">⬇ El detalle por período aparece en la tabla de comparación. El resumen ejecutivo corresponde al período más reciente cargado (${p.resumen.inicio} → ${p.resumen.fin}).</p>
+    ` : `
+    <p style="margin:0 0 8px"><strong>Período único</strong> — ${pdfSafe(p.meta.tienda)} &nbsp;·&nbsp; ${cfg.flag ?? ""} ${country}</p>
+    <p style="margin:0 0 8px">Este informe corresponde a la liquidación del período <strong>${p.resumen.inicio}</strong> al <strong>${p.resumen.fin}</strong>, con fecha de pago <strong>${p.resumen.fechaPago}</strong>. Incluye <strong>${kpi.ordenes} órdenes</strong> procesadas, ventas brutas de <strong>${fmtV(kpi.ventaBruta)}</strong> y un neto a pagar de <strong>${fmtV(totalAPagar)}</strong>.</p>
+    <p style="margin:0;font-size:11px;color:#64748b">Los KPIs, recomendaciones y alertas detalladas se encuentran en las secciones siguientes de este informe.</p>
+    `}
+  </div>
+</div>
 
 <!-- ANÁLISIS IA (si hay) -->
 ${aiInsights ? `
@@ -2359,7 +2410,11 @@ const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection
       `  ${e.ordenId}|${e.fecha}|${e.tipo}|${fmt(e.ventaBruta, cty)}`
     ).join("\n");
 
-    return `Eres experto contable de Rappi. Responde en español, máximo 3 párrafos, sin tecnicismos. Usa los datos del paidlot para responder.
+    return `Eres un asesor comercial y contable de Rappi, especializado en ayudar a los aliados (restaurantes y tiendas) a entender y optimizar sus liquidaciones de pago (paidlots). Tu rol es:
+- NUNCA sugerir vacíos legales, evasión fiscal, ni formas de reducir pagos al margen de la ley.
+- SIEMPRE orientar al aliado hacia soluciones legales: certificados de exención vigentes, correcta categorización fiscal, deducciones legalmente aplicables, revisión de contratos y tarifas con su ejecutivo de cuenta.
+- SIEMPRE destacar el valor de invertir en Rappi: DAR (Descuento Asumido por Rappi), RappiAds y otras herramientas para crecer en ventas y visibilidad.
+- Responder en español, con tono positivo, empático y orientado a soluciones. Máximo 3 párrafos, sin tecnicismos. Usa los datos del paidlot para personalizar la respuesta.
 
 PAIDLOT: ${p.meta.tienda} | ${country} | ${p.resumen.inicio}→${p.resumen.fin}
 KPIs: VentaBruta=${fmt(kpi.ventaBruta,cty)} | TotalPagar=${fmt(kpi.totalAPagar??kpi.neto,cty)} | Comision=${fmt(kpi.comision,cty)} | Impuestos=${fmt(kpi.impuestosTotalExacto??kpi.totalImpuestos??0,cty)} | TarifaEfectiva=${fmtPct(kpi.effectiveFee)} | DAR=${kpi.hasDar?"SI "+fmt(kpi.darInversionTotal,cty):"NO"} | ADS=${fmt(kpi.cuotaRappiAds??0,cty)} | ADSvencida=${fmt(kpi.rappiAdsCollection??0,cty)} | Compensaciones=${fmt(kpi.compensaciones,cty)} | Ajustes=${fmt(kpi.ajustesTotal,cty)} | Ordenes=${kpi.ordenes}
@@ -3240,7 +3295,7 @@ export default function RappiPaidlotAuditorPro() {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
-        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: "Analista financiero de aliados Rappi. Responde en español, conciso." }, { role: "user", content: prompt }], max_tokens: 300, temperature: 0.4 }),
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: "Eres asesor comercial de Rappi. Analiza paidlots de aliados en español, tono positivo. Destaca oportunidades de inversión (DAR, RappiAds) y mejoras legales de impuestos. NUNCA sugieras vacíos legales ni evasión. Conciso, sin markdown." }, { role: "user", content: prompt }], max_tokens: 300, temperature: 0.4 }),
       });
       const data = await res.json();
       aiInsights = data.choices?.[0]?.message?.content ?? "";
