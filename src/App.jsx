@@ -734,7 +734,7 @@ function detectAlerts(kpi, country) {
   const compPct  = kpi.ventaBruta > 0 && kpi.compensaciones > 0 ? kpi.compensaciones / kpi.ventaBruta : 0;
 
   if (kpi.effectiveFee > 0.35)
-    alerts.push({ type: "danger", icon: "🚨", title: "Tarifa efectiva elevada", msg: `Tarifa efectiva ${(kpi.effectiveFee*100).toFixed(1)}% supera el umbral del 35%. Revisar certificados de exención o deducciones aplicables.` });
+    alerts.push({ type: "danger", icon: "🚨", title: `Solo el ${(100 - kpi.effectiveFee*100).toFixed(1)}% del total queda disponible para el aliado`, msg: `Del total de ventas facturadas, solo el ${(100 - kpi.effectiveFee*100).toFixed(1)}% llega al aliado (tarifa efectiva: ${(kpi.effectiveFee*100).toFixed(1)}%). Revisar certificados de exención o deducciones aplicables.` });
   if (taxPct > 0.15)
     alerts.push({ type: "danger", icon: "🧾", title: "Carga impositiva alta", msg: `Impuestos representan el ${(taxPct*100).toFixed(1)}% de las ventas brutas (umbral recomendado: 15%). Verificar con el contador si existen regímenes especiales.` });
   if (compPct > 0.05)
@@ -2813,7 +2813,7 @@ ${ajustesText||"Sin ajustes."}`;
                   onKeyDown={handleKeyDown}
                   placeholder='Ej: "El aliado pregunta por qué le descontaron $200 el 13 de abril en impuestos"...'
                   rows={3}
-                  style={{ width: "100%", padding: "12px 50px 12px 14px", borderRadius: 12, border: "1.5px solid #e2e8f0", fontSize: 13, lineHeight: 1.5, resize: "none", outline: "none", fontFamily: "inherit", color: "#0f172a", boxSizing: "border-box", transition: "border-color 0.15s" }}
+                  style={{ width: "100%", padding: "12px 50px 12px 14px", borderRadius: 12, border: "1.5px solid #e2e8f0", fontSize: 13, lineHeight: 1.5, resize: "none", outline: "none", fontFamily: "inherit", color: "#0f172a", background: "#ffffff", boxSizing: "border-box", transition: "border-color 0.15s" }}
                   onFocus={e => e.target.style.borderColor = "#ff441f"}
                   onBlur={e => e.target.style.borderColor = "#e2e8f0"}
                 />
@@ -2909,6 +2909,7 @@ const OBJECTIONS = [
 // ── ObjecionesPanel — muestra libretos de objeciones con buscador interno ────
 const ObjecionesPanel = memo(({ objections, search }) => {
   const [copied, setCopied] = useState(null);
+  const [openId, setOpenId] = useState(null);
   const filtered = search
     ? objections.filter(o =>
         o.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -2924,37 +2925,44 @@ const ObjecionesPanel = memo(({ objections, search }) => {
       {filtered.length === 0 && (
         <div style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0", fontSize: 13 }}>Sin resultados para "{search}"</div>
       )}
-      {filtered.map(obj => (
-        <div key={obj.id} style={{ marginBottom: 14, borderRadius: 14, border: "1.5px solid #e2e8f0", overflow: "hidden" }}>
-          {/* Header */}
-          <div style={{ background: "#f8fafc", padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <span style={{ fontSize: 22, flexShrink: 0 }}>{obj.icon}</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 3 }}>{obj.title}</div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {obj.tags.map(t => (
-                    <span key={t} style={{ background: "#e0f2fe", color: "#0369a1", fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 20 }}>{t}</span>
-                  ))}
+      {filtered.map(obj => {
+        const isOpen = openId === obj.id;
+        return (
+          <div key={obj.id} style={{ marginBottom: 8, borderRadius: 12, border: `1.5px solid ${isOpen ? "#fbbf24" : "#e2e8f0"}`, overflow: "hidden", transition: "border-color 0.2s" }}>
+            <button
+              onClick={() => setOpenId(isOpen ? null : obj.id)}
+              style={{ width: "100%", background: isOpen ? "#fffbeb" : "#f8fafc", padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, border: "none", cursor: "pointer", textAlign: "left" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>{obj.icon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 3 }}>{obj.title}</div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {obj.tags.map(t => (
+                      <span key={t} style={{ background: "#e0f2fe", color: "#0369a1", fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 20 }}>{t}</span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-            <button
-              onClick={() => { navigator.clipboard.writeText(obj.script); setCopied(obj.id); setTimeout(() => setCopied(null), 2500); }}
-              style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", background: copied === obj.id ? "#dcfce7" : "white", color: copied === obj.id ? "#166534" : "#475569", border: "1.5px solid #e2e8f0", transition: "all 0.2s" }}
-            >{copied === obj.id ? "✅ Copiado!" : "📋 Copiar libreto"}</button>
+              <span style={{ fontSize: 18, color: "#94a3b8", flexShrink: 0, display: "inline-block", transition: "transform 0.2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+            </button>
+            {isOpen && (
+              <div style={{ padding: "12px 16px 14px", background: "#fffbeb", borderTop: "1px solid #fde68a" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 9, color: "#92400e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>WhatsApp / Chat</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(obj.script); setCopied(obj.id); setTimeout(() => setCopied(null), 2500); }}
+                    style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 20, cursor: "pointer", background: copied === obj.id ? "#dcfce7" : "white", color: copied === obj.id ? "#166534" : "#475569", border: "1.5px solid #e2e8f0", transition: "all 0.2s" }}
+                  >{copied === obj.id ? "✅ Copiado!" : "📋 Copiar libreto"}</button>
+                </div>
+                {obj.script.split("\n").map((line, i) => (
+                  <p key={i} style={{ fontSize: 12, color: "#1e293b", lineHeight: 1.75, margin: "0 0 2px" }}>{line || " "}</p>
+                ))}
+              </div>
+            )}
           </div>
-          {/* Script body */}
-          <div style={{ padding: "12px 16px", background: "#fffbeb", borderTop: "1px solid #fde68a" }}>
-            <div style={{ position: "relative" }}>
-              <div style={{ position: "absolute", top: 0, right: 0, fontSize: 9, color: "#92400e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>WhatsApp / Chat</div>
-            </div>
-            {obj.script.split("\n").map((line, i) => (
-              <p key={i} style={{ fontSize: 12, color: "#1e293b", lineHeight: 1.75, margin: "0 0 2px" }}>{line || " "}</p>
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 });
@@ -3030,7 +3038,7 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
                   placeholder="Buscar en el hub…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  style={{ padding: "7px 12px 7px 32px", borderRadius: 20, border: "1.5px solid #e2e8f0", fontSize: 12, width: 200, outline: "none", color: "#0f172a" }}
+                  style={{ padding: "7px 12px 7px 32px", borderRadius: 20, border: "1.5px solid #e2e8f0", fontSize: 12, width: 200, outline: "none", color: "#0f172a", background: "#ffffff" }}
                 />
                 <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#94a3b8" }}>🔍</span>
               </div>
