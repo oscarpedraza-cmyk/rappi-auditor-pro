@@ -789,9 +789,9 @@ function exportPDF(paidlot, country, aiInsights = "", allSelected = []) {
   // ── Recomendaciones de Facturación (data-driven) ─────────────────────────
   const recosFact = [];
   if (!kpi.hasDar && kpi.ventaBruta > 0)
-    recosFact.push({ prio: "alta", titulo: "Activar campaña DAR", texto: `Con ${fmtV(kpi.ventaBruta)} en ventas brutas, el aliado cumple el perfil para activar DAR. Rappi financia descuentos al consumidor final, incrementando la conversión sin afectar el neto del aliado.` });
+    recosFact.push({ prio: "media", titulo: "Aliado sin DAR — evaluar elegibilidad", texto: `Este aliado no tiene DAR activo. Con ${fmtV(kpi.ventaBruta)} en ventas brutas, puede ser candidato según los criterios de coinversión de Rappi. Conversarlo con el equipo comercial para evaluar si aplica al programa.` });
   if (kpi.hasDar)
-    recosFact.push({ prio: "media", titulo: "Escalar inversión DAR", texto: `La inversión DAR actual de ${fmtV(kpi.darInversionTotal)} está generando demanda activa. Ampliar el rango de productos elegibles o incrementar el descuento puede maximizar el volumen de órdenes.` });
+    recosFact.push({ prio: "media", titulo: "DAR activo — revisar performance", texto: `La inversión DAR activa de ${fmtV(kpi.darInversionTotal)} está generando demanda. Revisar con el equipo comercial si el rango de productos elegibles o los descuentos están optimizados para este período.` });
   if (!kpi.cuotaRappiAds || kpi.cuotaRappiAds === 0)
     recosFact.push({ prio: "media", titulo: "Iniciar pauta RappiAds", texto: `El aliado no tiene inversión activa en RappiAds. Una pauta bien segmentada en hora pico puede triplicar la visibilidad y generar un retorno de 3x a 5x sobre la inversión.` });
   if (kpi.cuotaRappiAds > 0 && adsPct < 0.10)
@@ -2413,7 +2413,8 @@ const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection
     return `Eres un asesor comercial y contable de Rappi, especializado en ayudar a los aliados (restaurantes y tiendas) a entender y optimizar sus liquidaciones de pago (paidlots). Tu rol es:
 - NUNCA sugerir vacíos legales, evasión fiscal, ni formas de reducir pagos al margen de la ley.
 - SIEMPRE orientar al aliado hacia soluciones legales: certificados de exención vigentes, correcta categorización fiscal, deducciones legalmente aplicables, revisión de contratos y tarifas con su ejecutivo de cuenta.
-- SIEMPRE destacar el valor de invertir en Rappi: DAR (Descuento Asumido por Rappi), RappiAds y otras herramientas para crecer en ventas y visibilidad.
+- SIEMPRE destacar el valor de RappiAds como herramienta que el aliado puede activar para mejorar su visibilidad y ventas.
+- NO decirle al aliado que puede "activar DAR" o "invertir en DAR" — el DAR es una inversión que Rappi decide según sus criterios internos de coinversión, no algo que el aliado activa por voluntad propia. Si el aliado pregunta por DAR, explicar que es un programa de inversión de Rappi y que deben conversarlo con su ejecutivo de cuenta.
 - Responder en español, con tono positivo, empático y orientado a soluciones. Máximo 3 párrafos, sin tecnicismos. Usa los datos del paidlot para personalizar la respuesta.
 
 PAIDLOT: ${p.meta.tienda} | ${country} | ${p.resumen.inicio}→${p.resumen.fin}
@@ -3160,8 +3161,23 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
 // § 10. MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Limpieza mensual del historial de chat (día 30 de cada mes)
+function runMonthlyChatCleanup() {
+  try {
+    const today = new Date();
+    if (today.getDate() < 30) return; // Solo ejecutar a partir del día 30
+    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    const lastCleared = localStorage.getItem("rappi_chat_last_cleared") ?? "";
+    if (lastCleared === currentMonth) return; // Ya se limpió este mes
+    // Borrar todos los historiales de chat
+    const keys = Object.keys(localStorage).filter(k => k.startsWith("rappi_chat_v1_"));
+    keys.forEach(k => localStorage.removeItem(k));
+    localStorage.setItem("rappi_chat_last_cleared", currentMonth);
+  } catch {}
+}
+
 export default function RappiPaidlotAuditorPro() {
-  const [paidlots, setPaidlots] = useState(() => loadPaidlots());
+  const [paidlots, setPaidlots] = useState(() => { runMonthlyChatCleanup(); return loadPaidlots(); });
   const [activeIdx, setActiveIdx] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [activeGroupKey, setActiveGroupKey] = useState(null);
@@ -3295,7 +3311,7 @@ export default function RappiPaidlotAuditorPro() {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
-        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: "Eres asesor comercial de Rappi. Analiza paidlots de aliados en español, tono positivo. Destaca oportunidades de inversión (DAR, RappiAds) y mejoras legales de impuestos. NUNCA sugieras vacíos legales ni evasión. Conciso, sin markdown." }, { role: "user", content: prompt }], max_tokens: 300, temperature: 0.4 }),
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: "Eres asesor comercial de Rappi. Analiza paidlots de aliados en español, tono positivo. Destaca oportunidades de RappiAds y mejoras legales de impuestos. NUNCA sugieras vacíos legales ni evasión. NUNCA digas que el aliado puede activar o invertir en DAR — DAR es decisión de Rappi. Conciso, sin markdown." }, { role: "user", content: prompt }], max_tokens: 300, temperature: 0.4 }),
       });
       const data = await res.json();
       aiInsights = data.choices?.[0]?.message?.content ?? "";
