@@ -3513,7 +3513,7 @@ export default function RappiPaidlotAuditorPro() {
               {selectedPaidlots.length >= 2 && <ComparisonPanel paidlots={selectedPaidlots} country={activeCountry} />}
 
               {/* ── TWO-COLUMN LAYOUT: sections left + EducationHub right ── */}
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 350px", gap: 20, alignItems: "start", marginTop: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 220px", gap: 16, alignItems: "start", marginTop: 16 }}>
                 {/* LEFT column: all detail sections */}
                 <div>
 
@@ -3794,65 +3794,31 @@ export default function RappiPaidlotAuditorPro() {
                 {/* RIGHT column: KPI sidebar + EducationHub */}
                 <div style={{ position: "sticky", top: 158, maxHeight: "calc(100vh - 170px)", overflowY: "auto", paddingBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
 
-                  {/* ── KPI Panel ── */}
-                  <div style={{ background: "white", borderRadius: 14, padding: "14px 14px 12px", border: "1px solid #e2e8f0", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-                    <KPIPanel
-                      topKpis={activePaidlot.topKpis}
-                      country={activeCountry}
-                      selectedKpi={selectedKpi}
-                      onSelectKpi={(key) => {
-                        setSelectedKpi(key);
-                        const sectionMap = {
-                          ventaBruta: "ordenes",
-                          darInversionTotal: "dar",
-                          descuentosVenta: "descuentosVenta",
-                          comision: "plataforma",
-                          impuestosTotalExacto: "impuestos",
-                          totalAPagar: "ordenes",
-                          otrosDescuentos: "ajustes",
-                          prestamos: "ajustes",
-                        };
-                        if (sectionMap[key]) handleHighlightSection(sectionMap[key]);
-                        const el = document.getElementById(`section-${sectionMap[key] ?? key}`);
-                        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                      }}
-                    />
-                  </div>
-
                   {/* ── Knowledge Center open button ── */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <button
-                      onClick={() => { setKnowledgeTab("DAR"); setKnowledgeOpen(true); }}
-                      style={{ width: "100%", background: "linear-gradient(135deg,#fff7ed,#fff)", border: "1.5px solid #fed7aa", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left" }}
-                    >
-                      <span style={{ fontSize: 22, flexShrink: 0 }}>🎓</span>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: "#c2410c" }}>Hub de Conocimiento</div>
-                        <div style={{ fontSize: 10, color: "#92400e" }}>DAR · ADS · Impuestos · Conceptos · Fórmulas</div>
+                    <button onClick={() => { setKnowledgeTab("DAR"); setKnowledgeOpen(true); }}
+                      style={{ width: "100%", background: "linear-gradient(135deg,#fff7ed,#fff)", border: "1.5px solid #fed7aa", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textAlign: "left" }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>🎓</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: "#c2410c" }}>Hub de Conocimiento</div>
+                        <div style={{ fontSize: 9, color: "#92400e", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>DAR · ADS · Impuestos · Fórmulas</div>
                       </div>
-                      <span style={{ marginLeft: "auto", fontSize: 14, color: "#f97316" }}>→</span>
                     </button>
-                    <button
-                      onClick={() => { setKnowledgeTab("OBJECIONES"); setKnowledgeOpen(true); }}
-                      style={{ width: "100%", background: "linear-gradient(135deg,#fff7f5,#fff)", border: "1.5px solid #fca5a5", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left" }}
-                    >
-                      <span style={{ fontSize: 22, flexShrink: 0 }}>⚡</span>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: "#dc2626" }}>Libretos de Objeciones</div>
-                        <div style={{ fontSize: 10, color: "#b91c1c" }}>Respuestas listas para el aliado</div>
+                    <button onClick={() => { setKnowledgeTab("OBJECIONES"); setKnowledgeOpen(true); }}
+                      style={{ width: "100%", background: "linear-gradient(135deg,#fff7f5,#fff)", border: "1.5px solid #fca5a5", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textAlign: "left" }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>⚡</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: "#dc2626" }}>Libretos de Objeciones</div>
+                        <div style={{ fontSize: 9, color: "#b91c1c" }}>Respuestas listas para el aliado</div>
                       </div>
-                      <span style={{ marginLeft: "auto", fontSize: 14, color: "#ef4444" }}>→</span>
                     </button>
-                    <button
-                      onClick={() => { setKnowledgeTab("CONSULTAR"); setKnowledgeOpen(true); }}
-                      style={{ width: "100%", background: "linear-gradient(135deg,#faf5ff,#fff)", border: "1.5px solid #d8b4fe", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left" }}
-                    >
-                      <span style={{ fontSize: 22, flexShrink: 0 }}>🔍</span>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: "#7c3aed" }}>Consultar al Asistente</div>
-                        <div style={{ fontSize: 10, color: "#6d28d9" }}>Dudas del aliado con IA + datos del paidlot</div>
+                    <button onClick={() => { setKnowledgeTab("CONSULTAR"); setKnowledgeOpen(true); }}
+                      style={{ width: "100%", background: "linear-gradient(135deg,#faf5ff,#fff)", border: "1.5px solid #d8b4fe", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textAlign: "left" }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>🎓</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: "#7c3aed" }}>Consultar al Asistente</div>
+                        <div style={{ fontSize: 9, color: "#6d28d9" }}>Pregunta a la IA sobre el paidlot</div>
                       </div>
-                      <span style={{ marginLeft: "auto", fontSize: 14, color: "#7c3aed" }}>→</span>
                     </button>
                   </div>
 
