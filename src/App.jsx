@@ -2299,6 +2299,7 @@ function detectSection(query) {
 const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection, onHighlightTab, inline = false, compact = false, onOpenKnowledge }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [result, setResult] = useState(null);
   const [script, setScript] = useState(null);
   const [detectedSection, setDetectedSection] = useState(null);
@@ -2476,6 +2477,7 @@ ${ajustesText||"Sin ajustes."}`;
   const handleSearch = useCallback(async (queryOverride) => {
     const q = (queryOverride !== undefined ? queryOverride : query).trim();
     if (!q || !paidlot) return;
+    setSubmittedQuery(q);
     setLoading(true);
     setResult(null);
     setScript(null);
@@ -2828,16 +2830,16 @@ ${ajustesText||"Sin ajustes."}`;
                 </div>
               )}
 
-              {/* Loading */}
-              {loading && (
+              {/* Loading — hidden in compact mode (shown in its own modal) */}
+              {!compact && loading && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px", background: "#f8fafc", borderRadius: 12, marginBottom: 14 }}>
                   <div style={{ width: 18, height: 18, border: "2px solid #ff441f", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
                   <span style={{ fontSize: 13, color: "#64748b" }}>Analizando el paidlot y construyendo la respuesta...</span>
                 </div>
               )}
 
-              {/* ── RESULT BLOCK ── */}
-              {result && !loading && (
+              {/* ── RESULT BLOCK — hidden in compact mode (shown in its own modal) ── */}
+              {!compact && result && !loading && (
                 <div style={{ animation: "fadeIn 0.3s ease" }}>
 
                   {/* AI Answer */}
@@ -2936,10 +2938,115 @@ ${ajustesText||"Sin ajustes."}`;
 
   // ── Inline mode: just body + input, no floating button or overlay ──────────
   if (inline) {
+    const closeCompactResult = () => { setResult(null); setScript(null); setDetectedSection(null); setExternalTerm(null); };
     return (
       <div style={{ display: "flex", flexDirection: "column", ...(compact ? {} : { height: "100%", minHeight: 400 }) }}>
         {assistantBody}
         {assistantInput}
+
+        {/* ── Compact result modal — only in compact mode ── */}
+        {compact && (loading || result) && (
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 600, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}
+            onClick={e => { if (e.target === e.currentTarget && !loading) closeCompactResult(); }}
+          >
+            <div style={{ background: "white", borderRadius: 18, width: "100%", maxWidth: 640, maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 32px 80px rgba(0,0,0,0.3)", animation: "fadeIn 0.2s ease", overflow: "hidden" }}>
+
+              {/* Modal header */}
+              <div style={{ padding: "14px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "#faf5ff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <span style={{ fontSize: 16 }}>🔍</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 12, color: "#7c3aed" }}>Respuesta del Asistente IA</div>
+                    {submittedQuery && <div style={{ fontSize: 11, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 380 }}>"{submittedQuery}"</div>}
+                  </div>
+                </div>
+                {!loading && (
+                  <button onClick={closeCompactResult} style={{ background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 8, padding: "5px 11px", cursor: "pointer", fontSize: 13, color: "#64748b", fontWeight: 700, flexShrink: 0 }}>✕</button>
+                )}
+              </div>
+
+              {/* Modal body */}
+              <div style={{ overflowY: "auto", padding: "18px 20px", flex: 1 }}>
+
+                {/* Loading */}
+                {loading && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: 14 }}>
+                    <div style={{ width: 32, height: 32, border: "3px solid #ff441f", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <span style={{ fontSize: 13, color: "#64748b" }}>Analizando el paidlot y construyendo la respuesta...</span>
+                  </div>
+                )}
+
+                {/* Detected section chip */}
+                {!loading && detectedSection && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "8px 14px", background: detectedSection.bg, border: `1.5px solid ${detectedSection.color}`, borderRadius: 30 }}>
+                    <span style={{ fontSize: 15 }}>{detectedSection.icon}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: detectedSection.color }}>Sección: <strong>{detectedSection.label}</strong></span>
+                    <span style={{ fontSize: 10, color: detectedSection.color, marginLeft: "auto" }}>↑ resaltado en el dashboard</span>
+                  </div>
+                )}
+
+                {/* AI Answer */}
+                {!loading && result && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 14 }}>🔍</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase" }}>Análisis del paidlot</span>
+                      {localResolved && <span style={{ fontSize: 10, fontWeight: 700, background: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: 20 }}>⚡ Local — sin IA</span>}
+                    </div>
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "14px 16px" }}>
+                      {result.split("\n").map((line, i) => (
+                        <p key={i} style={{ fontSize: 13, color: "#1e293b", lineHeight: 1.65, margin: "0 0 6px" }}>{line || " "}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Farmer script */}
+                {!loading && script && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 14 }}>📋</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase" }}>Libreto — Mensaje para el aliado</span>
+                      </div>
+                      <button onClick={handleCopyScript} style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: copied ? "#dcfce7" : "#f1f5f9", color: copied ? "#166534" : "#475569", transition: "all 0.2s" }}>
+                        {copied ? "✅ Copiado" : "📋 Copiar"}
+                      </button>
+                    </div>
+                    <div style={{ background: "#fffbeb", border: "1.5px solid #fde68a", borderRadius: 12, padding: "14px 16px", position: "relative" }}>
+                      <div style={{ position: "absolute", top: 10, right: 12, fontSize: 10, color: "#92400e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>WhatsApp / Chat</div>
+                      {script.split("\n").map((line, i) => (
+                        <p key={i} style={{ fontSize: 12, color: "#1e293b", lineHeight: 1.7, margin: "0 0 4px" }}>{line || " "}</p>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: 10, color: "#94a3b8", marginTop: 6 }}>💡 Edita el mensaje antes de enviarlo si necesitas personalizarlo.</p>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                {!loading && result && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                    <button onClick={closeCompactResult} style={{ fontSize: 11, color: "#64748b", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Hacer otra consulta</button>
+                    {externalTerm && (
+                      <a href={"https://www.google.com/search?q=" + encodeURIComponent("normativa fiscal Rappi aliados " + country + " " + externalTerm)}
+                        target="_blank" rel="noreferrer"
+                        style={{ fontSize: 11, fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 20, padding: "3px 10px", textDecoration: "none" }}>
+                        🔍 Investigar base legal
+                      </a>
+                    )}
+                    {aiLog.length > 0 && (
+                      <button onClick={() => exportPDF(paidlot, country, aiLog)}
+                        style={{ fontSize: 11, fontWeight: 700, color: "#7c3aed", background: "#faf5ff", border: "1px solid #d8b4fe", borderRadius: 20, padding: "3px 10px", cursor: "pointer" }}>
+                        📄 Exportar log de consultas
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
