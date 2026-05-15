@@ -2909,11 +2909,17 @@ ${ajustesText||"Sin ajustes."}`;
       {/* Floating button */}
       <button
         onClick={() => onOpenKnowledge ? onOpenKnowledge("CONSULTAR") : setOpen(true)}
-        style={{ position: "fixed", bottom: 28, right: 28, width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg,#ff441f,#ff6b47)", color: "white", border: "none", cursor: "pointer", fontSize: 24, boxShadow: "0 8px 24px rgba(255,68,31,0.4)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.15s" }}
-        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
-        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-        title="Centro de Conocimiento Rappi"
-      >💬</button>
+        style={{ position: "fixed", bottom: 28, right: 24, borderRadius: 30, background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "white", border: "none", cursor: "pointer", boxShadow: "0 8px 28px rgba(124,58,237,0.45)", zIndex: 200, display: "flex", alignItems: "center", gap: 8, padding: "13px 20px", transition: "transform 0.15s, box-shadow 0.15s" }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.boxShadow = "0 12px 32px rgba(124,58,237,0.55)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 8px 28px rgba(124,58,237,0.45)"; }}
+        title="Consultar al asistente IA sobre este paidlot"
+      >
+        <span style={{ fontSize: 20 }}>🎓</span>
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.2 }}>Consultar IA</div>
+          <div style={{ fontSize: 9, opacity: 0.85, lineHeight: 1.2 }}>Pregunta sobre el paidlot</div>
+        </div>
+      </button>
 
       {/* Standalone modal */}
       {open && (
@@ -2922,7 +2928,7 @@ ${ajustesText||"Sin ajustes."}`;
             <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}} @keyframes fadeIn{from{opacity:0}to{opacity:1}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#ff441f,#ff6b47)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>💬</div>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🎓</div>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>Asistente de Dudas del Farmer</div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{paidlot.meta.tienda} · {country} · Paidlot {paidlot.meta.paidlotId}</div>
@@ -3481,12 +3487,22 @@ export default function RappiPaidlotAuditorPro() {
                 </div>
               </div>
 
-              {/* ── Alerts (below sticky bar) ── */}
+              {/* ── KPIs — resumen arriba de todo ── */}
               <div style={{ marginTop: 12 }}>
+                <KPIGrid topKpis={p.topKpis} country={activeCountry} selectedKpi={selectedKpi} onSelectKpi={(key) => {
+                  setSelectedKpi(key);
+                  const sectionMap = { ventaBruta:"ordenes", darInversionTotal:"dar", descuentosVenta:"descuentosVenta", comision:"plataforma", impuestosTotalExacto:"impuestos", totalAPagar:"ordenes", otrosDescuentos:"ajustes", prestamos:"ajustes" };
+                  if (sectionMap[key]) handleHighlightSection(sectionMap[key]);
+                  const el = document.getElementById(`section-${sectionMap[key] ?? key}`);
+                  if (el) el.scrollIntoView({ behavior:"smooth", block:"start" });
+                }} />
+              </div>
+
+              {/* ── Alerts ── */}
+              <div style={{ marginTop: 10 }}>
                 <AutoAlertsBanner kpi={p.topKpis} country={activeCountry} />
                 <DarZeroAlert kpis={p.topKpis} tienda={p.meta.tienda} />
                 <DarKpiPanel kpis={p.topKpis} country={activeCountry} />
-                <AdsAlertBanner kpis={p.topKpis} country={activeCountry} />
               </div>
 
               {/* ── Comparación de períodos (cuando hay múltiples seleccionados) ── */}
