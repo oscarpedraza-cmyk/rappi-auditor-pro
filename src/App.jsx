@@ -2296,7 +2296,7 @@ function detectSection(query) {
   return bestScore >= 1 ? best : null;
 }
 
-const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection, onHighlightTab, inline = false, onOpenKnowledge }) => {
+const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection, onHighlightTab, inline = false, compact = false, onOpenKnowledge }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [result, setResult] = useState(null);
@@ -2647,7 +2647,7 @@ ${ajustesText||"Sin ajustes."}`;
 
   // ── Shared body: insights + result + script ────────────────────────────────
   const assistantBody = (
-    <div style={{ flex: 1, overflowY: "auto", padding: inline ? "0" : "16px 20px" }}>
+    <div style={{ ...(compact ? {} : { flex: 1, overflowY: "auto" }), padding: inline ? "0" : "16px 20px" }}>
 
               {/* Detected section chip */}
               {detectedSection && (
@@ -2660,8 +2660,8 @@ ${ajustesText||"Sin ajustes."}`;
                 </div>
               )}
 
-              {/* Trend banner — shown once when there are multiple paidlots */}
-              {!result && !loading && (() => {
+              {/* Trend banner + Insights + Quick questions — hidden in compact mode */}
+              {!compact && !result && !loading && (() => {
                 const t = computeTrend();
                 if (!t) return null;
                 const isUp = t.diff >= 0;
@@ -2679,7 +2679,7 @@ ${ajustesText||"Sin ajustes."}`;
               })()}
 
               {/* ── PROACTIVE INSIGHTS — shown before first query ─────────── */}
-              {!result && !loading && (() => {
+              {!compact && !result && !loading && (() => {
                 const kpi = paidlot.topKpis;
                 const insights = [];
 
@@ -2800,7 +2800,7 @@ ${ajustesText||"Sin ajustes."}`;
               )}
 
               {/* ── Preguntas rápidas por categoría ─────────────────────────── */}
-              {!result && !loading && (
+              {!compact && !result && !loading && (
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Preguntas rápidas</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
@@ -2901,7 +2901,7 @@ ${ajustesText||"Sin ajustes."}`;
   ); // end assistantBody
 
   const assistantInput = (
-    <div style={{ padding: inline ? "12px 0 0" : "14px 20px", borderTop: "1px solid #f1f5f9", flexShrink: 0 }}>
+    <div style={{ padding: compact ? "0 0 12px" : inline ? "12px 0 0" : "14px 20px", borderTop: compact ? "none" : "1px solid #f1f5f9", flexShrink: 0 }}>
               <div style={{ position: "relative" }}>
                 <textarea
                   ref={textareaRef}
@@ -2937,7 +2937,7 @@ ${ajustesText||"Sin ajustes."}`;
   // ── Inline mode: just body + input, no floating button or overlay ──────────
   if (inline) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 400 }}>
+      <div style={{ display: "flex", flexDirection: "column", ...(compact ? {} : { height: "100%", minHeight: 400 }) }}>
         {assistantBody}
         {assistantInput}
       </div>
@@ -3167,9 +3167,9 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
         </div>
 
         {/* ── Asistente IA — siempre visible, fuera de las tabs ── */}
-        <div style={{ padding: "14px 24px", borderBottom: "1.5px solid #ede9fe", background: "#faf5ff", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-            <span style={{ fontSize: 15 }}>🔍</span>
+        <div style={{ padding: "12px 24px 0", borderBottom: "1.5px solid #ede9fe", background: "#faf5ff", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+            <span style={{ fontSize: 14 }}>🔍</span>
             <span style={{ fontWeight: 800, fontSize: 12, color: "#7c3aed" }}>Consultar IA sobre el paidlot</span>
             <span style={{ fontSize: 10, color: "#a78bfa", fontWeight: 500 }}>— Describe la duda con el mayor detalle posible</span>
           </div>
@@ -3180,6 +3180,7 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
             onHighlightSection={onHighlightSection}
             onHighlightTab={onHighlightTab}
             inline={true}
+            compact={true}
           />
         </div>
 
