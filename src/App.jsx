@@ -306,7 +306,7 @@ export const CONFIG = {
     {
       key: "ventas", label: "Ventas y descuentos para llegar a la venta neta", icon: "💰", color: "#22c55e", bg: "#dcfce7",
       tooltip: "Suma de Venta Bruta de todas las órdenes menos descuentos directos de producto. Es la base desde la que se calculan comisiones e impuestos.",
-      cols: ["Venta Bruta", "Descuento de Producto asumido por el aliado", "Descuento de Producto", "Descuento en créditos"],
+      cols: ["Venta Bruta", "Descuento en créditos"],
     },
     {
       key: "dar", label: "Descuentos asumidos por Rappi (DAR)", icon: "🎯", color: "#f97316", bg: "#fff7ed",
@@ -317,6 +317,8 @@ export const CONFIG = {
       key: "descuentosVenta", label: "Descuentos sobre la venta", icon: "🔄", color: "#8b5cf6", bg: "#ede9fe",
       tooltip: "Descuentos de domicilio, vouchers, pagos al repartidor, compensaciones y costos de canceladas que se descuentan de la venta.",
       cols: [
+        "Descuento de Producto asumido por el aliado",
+        "Descuento de Producto",
         "Costo de Domicilio - Propinas (marketplace)",
         "Meal Vouchers",
         "Total pagado por Repartidor independiente al Aliado en Efectivo",
@@ -649,8 +651,10 @@ function parseWorkbook(wb, countryOverride = null) {
     ventaBruta: ventaBrutaTotal,
     comision: comisionTotal,
     compensaciones: Math.abs(colTotals["Compensaciones"] ?? 0),
-    // KPI: Descuentos sobre la venta = Devolución Compensaciones + Costo Canceladas
+    // KPI: Descuentos sobre la venta = Descuento Producto aliado + Compensaciones + Canceladas + Domicilio + etc.
     descuentosVenta: round2(
+      Math.abs(colTotals["Descuento de Producto asumido por el aliado"] ?? 0) +
+      Math.abs(colTotals["Descuento de Producto"] ?? 0) +
       Math.abs(colTotals["Devolucion de Compensaciones"] ?? 0) +
       Math.abs(colTotals["Devolucion Compensaciones"] ?? 0) +
       Math.abs(colTotals["Costo Canceladas"] ?? 0) +
