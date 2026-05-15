@@ -2915,7 +2915,7 @@ ${ajustesText||"Sin ajustes."}`;
                   onBlur={e => e.target.style.borderColor = "#e2e8f0"}
                 />
                 <button
-                  onClick={handleSearch}
+                  onClick={() => handleSearch()}
                   disabled={loading || !query.trim()}
                   style={{ position: "absolute", right: 10, bottom: 10, width: 32, height: 32, borderRadius: 8, background: loading || !query.trim() ? "#f1f5f9" : "linear-gradient(135deg,#ff441f,#ff6b47)", color: loading || !query.trim() ? "#94a3b8" : "white", border: "none", cursor: loading || !query.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, transition: "all 0.15s" }}
                   title="Enviar (Ctrl+Enter)"
@@ -2949,7 +2949,7 @@ ${ajustesText||"Sin ajustes."}`;
     <>
       {/* Floating button */}
       <button
-        onClick={() => onOpenKnowledge ? onOpenKnowledge("CONSULTAR") : setOpen(true)}
+        onClick={() => onOpenKnowledge ? onOpenKnowledge("DAR") : setOpen(true)}
         style={{ position: "fixed", bottom: 28, right: 24, borderRadius: 30, background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "white", border: "none", cursor: "pointer", boxShadow: "0 8px 28px rgba(124,58,237,0.45)", zIndex: 200, display: "flex", alignItems: "center", gap: 8, padding: "13px 20px", transition: "transform 0.15s, box-shadow 0.15s" }}
         onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.boxShadow = "0 12px 32px rgba(124,58,237,0.55)"; }}
         onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 8px 28px rgba(124,58,237,0.45)"; }}
@@ -3070,9 +3070,9 @@ const ObjecionesPanel = memo(({ objections, search }) => {
   );
 });
 
-// ── KnowledgeCenterModal — 9 tabs: 6 edu + PAGOS + CONSULTAR + OBJECIONES ────
-const KC_TABS = [...EDUCATION_TABS, "PAGOS", "CONSULTAR", "OBJECIONES"];
-const KC_ICONS = { DAR:"🎯", ADS:"📺", IMPUESTOS:"🧾", COMPENSACIONES:"🔄", CONCEPTOS:"📖", "FÓRMULAS":"🔢", PAGOS:"💳", CONSULTAR:"🔍", OBJECIONES:"⚡" };
+// ── KnowledgeCenterModal — 8 tabs: 6 edu + PAGOS + OBJECIONES ────────────────
+const KC_TABS = [...EDUCATION_TABS, "PAGOS", "OBJECIONES"];
+const KC_ICONS = { DAR:"🎯", ADS:"📺", IMPUESTOS:"🧾", COMPENSACIONES:"🔄", CONCEPTOS:"📖", "FÓRMULAS":"🔢", PAGOS:"💳", OBJECIONES:"⚡" };
 
 const PAGOS_FAQ = [
   { q: "¿Cuándo me pagan? ¿Cuáles son los períodos de pago?", a: "Rappi tiene diferentes frecuencias de pago según el contrato del aliado:\n\n• **Semanal** — el período cierra el domingo a medianoche. El paidlot se genera el lunes y el depósito llega en 1–3 días hábiles.\n• **Quincenal** — cierres el día 15 y el último día del mes.\n• **Mensual** — cierre el último día del mes.\n\nLa fecha exacta de depósito aparece en el campo 'Fecha de Pago' en el encabezado de tu paidlot." },
@@ -3152,18 +3152,35 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
           {/* Tab strip */}
           <div style={{ display: "flex", gap: 0, overflowX: "auto" }}>
             {KC_TABS.map(t => {
-              const isSpecial = t === "CONSULTAR" || t === "OBJECIONES";
+              const isSpecial = t === "OBJECIONES";
               return (
                 <button key={t} onClick={() => setTab(t)}
-                  style={{ padding: "9px 14px", border: "none", borderBottom: tab === t ? `2.5px solid ${isSpecial ? (t === "OBJECIONES" ? "#f97316" : "#7c3aed") : "#ff441f"}` : "2.5px solid transparent",
+                  style={{ padding: "9px 14px", border: "none", borderBottom: tab === t ? `2.5px solid ${isSpecial ? "#f97316" : "#ff441f"}` : "2.5px solid transparent",
                     background: "none", cursor: "pointer", fontSize: 11, fontWeight: tab === t ? 800 : 500,
-                    color: tab === t ? (isSpecial ? (t === "OBJECIONES" ? "#f97316" : "#7c3aed") : "#ff441f") : "#64748b",
+                    color: tab === t ? (isSpecial ? "#f97316" : "#ff441f") : "#64748b",
                     whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
                   <span>{KC_ICONS[t]}</span>{t}
                 </button>
               );
             })}
           </div>
+        </div>
+
+        {/* ── Asistente IA — siempre visible, fuera de las tabs ── */}
+        <div style={{ padding: "14px 24px", borderBottom: "1.5px solid #ede9fe", background: "#faf5ff", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+            <span style={{ fontSize: 15 }}>🔍</span>
+            <span style={{ fontWeight: 800, fontSize: 12, color: "#7c3aed" }}>Consultar IA sobre el paidlot</span>
+            <span style={{ fontSize: 10, color: "#a78bfa", fontWeight: 500 }}>— Describe la duda con el mayor detalle posible</span>
+          </div>
+          <DoubtAssistant
+            paidlot={paidlot}
+            country={country}
+            allPaidlots={allPaidlots}
+            onHighlightSection={onHighlightSection}
+            onHighlightTab={onHighlightTab}
+            inline={true}
+          />
         </div>
 
         {/* ── Content ── */}
@@ -3175,24 +3192,6 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
 
           {/* Pagos FAQ */}
           {tab === "PAGOS" && <PagosPanel search={search} />}
-
-          {/* Consultar — full DoubtAssistant inline */}
-          {tab === "CONSULTAR" && (
-            <div style={{ maxWidth: 680 }}>
-              <div style={{ marginBottom: 16, padding: "10px 14px", background: "#faf5ff", border: "1.5px solid #d8b4fe", borderRadius: 12 }}>
-                <div style={{ fontWeight: 800, fontSize: 12, color: "#7c3aed", marginBottom: 3 }}>🔍 Asistente de consultas del paidlot</div>
-                <div style={{ fontSize: 11, color: "#6d28d9" }}>Describe la duda del aliado con el mayor detalle posible. Puedes mencionar montos, fechas o columnas del paidlot.</div>
-              </div>
-              <DoubtAssistant
-                paidlot={paidlot}
-                country={country}
-                allPaidlots={allPaidlots}
-                onHighlightSection={onHighlightSection}
-                onHighlightTab={onHighlightTab}
-                inline={true}
-              />
-            </div>
-          )}
 
           {/* Objeciones */}
           {tab === "OBJECIONES" && (
@@ -3849,7 +3848,7 @@ export default function RappiPaidlotAuditorPro() {
                         <div style={{ fontSize: 9, color: "#b91c1c" }}>Respuestas listas para el aliado</div>
                       </div>
                     </button>
-                    <button onClick={() => { setKnowledgeTab("CONSULTAR"); setKnowledgeOpen(true); }}
+                    <button onClick={() => { setKnowledgeTab("DAR"); setKnowledgeOpen(true); }}
                       style={{ width: "100%", background: "linear-gradient(135deg,#faf5ff,#fff)", border: "1.5px solid #d8b4fe", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textAlign: "left" }}>
                       <span style={{ fontSize: 18, flexShrink: 0 }}>🎓</span>
                       <div style={{ minWidth: 0 }}>
@@ -3931,7 +3930,7 @@ export default function RappiPaidlotAuditorPro() {
         allPaidlots={paidlots}
         onHighlightSection={handleHighlightSection}
         onHighlightTab={handleHighlightSection}
-        onOpenKnowledge={(tab) => { setKnowledgeTab(tab ?? "CONSULTAR"); setKnowledgeOpen(true); }}
+        onOpenKnowledge={(tab) => { setKnowledgeTab(tab ?? "DAR"); setKnowledgeOpen(true); }}
       />
 
       {/* Knowledge Center Modal */}
