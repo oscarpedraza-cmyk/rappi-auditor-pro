@@ -724,7 +724,44 @@ function parseWorkbook(wb, countryOverride = null) {
 
 const LS_KEY = "rappi_paidlots_v47";
 const savePaidlots = (list) => { try { localStorage.setItem(LS_KEY, JSON.stringify(list.map(p => ({ ...p, headers: [] })).slice(0, 20))); } catch {} };
-const loadPaidlots = () => { try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : []; } catch { return []; } };
+
+// Recalcula grupos desde colTotals usando la config actual — así cambios en CONFIG.groups
+// se aplican a paidlots guardados sin necesidad de volver a subir el archivo.
+function recomputeGroups(colTotals) {
+  if (!colTotals || Object.keys(colTotals).length === 0) return [];
+  return CONFIG.groups.map(g => {
+    const seenResolved = new Set();
+    const seenLabelVal = new Set();
+    const items = g.cols.map(col => {
+      const resolvedKey = (colTotals[col] !== undefined && colTotals[col] !== 0) ? col : null;
+      if (!resolvedKey) return null;
+      const v = colTotals[resolvedKey] ?? 0;
+      return { col, label: col, value: v };
+    }).filter(item => {
+      if (!item || Math.abs(item.value) <= 0.005) return false;
+      const rs = slugify(item.col);
+      if (seenResolved.has(rs)) return false;
+      const lvKey = `${slugify(item.label).slice(0, 22)}_${Math.abs(item.value).toFixed(2)}`;
+      if (seenLabelVal.has(lvKey)) return false;
+      seenResolved.add(rs); seenLabelVal.add(lvKey);
+      return true;
+    });
+    const total = items.reduce((s, i) => s + Math.abs(i.value), 0);
+    return { ...g, items, total };
+  }).filter(g => g.total > 0.005);
+}
+
+const loadPaidlots = () => {
+  try {
+    const r = localStorage.getItem(LS_KEY);
+    if (!r) return [];
+    return JSON.parse(r).map(p => ({
+      ...p,
+      // Recomputa grupos desde colTotals con la config vigente
+      groups: p.colTotals ? recomputeGroups(p.colTotals) : (p.groups ?? []),
+    }));
+  } catch { return []; }
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // § 6. ALERTS + PDF EXPORT
