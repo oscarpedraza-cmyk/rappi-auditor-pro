@@ -3070,9 +3070,147 @@ const ObjecionesPanel = memo(({ objections, search }) => {
   );
 });
 
-// ── KnowledgeCenterModal — 8 tabs: 6 edu + PAGOS + OBJECIONES ────────────────
-const KC_TABS = [...EDUCATION_TABS, "PAGOS", "OBJECIONES"];
-const KC_ICONS = { DAR:"🎯", ADS:"📺", IMPUESTOS:"🧾", COMPENSACIONES:"🔄", CONCEPTOS:"📖", "FÓRMULAS":"🔢", PAGOS:"💳", OBJECIONES:"⚡" };
+// ── AdsROICalculator ──────────────────────────────────────────────────────────
+const AdsROICalculator = memo(({ paidlot, country }) => {
+  const kpi = paidlot?.topKpis ?? {};
+  const ordenes = kpi.ordenes ?? 0;
+  const ventaBruta = kpi.ventaBruta ?? 0;
+  const comisionRate = ventaBruta > 0 ? Math.abs(kpi.comision ?? 0) / ventaBruta : 0.18;
+  const avgTicket = ordenes > 0 ? ventaBruta / ordenes : 0;
+  const currentAds = Math.abs(kpi.rappiAdsCollection ?? 0);
+
+  const [budget, setBudget] = useState(currentAds > 0 ? Math.round(currentAds * 1.2) : Math.round(ventaBruta * 0.02));
+  const [liftPct, setLiftPct] = useState(20);
+  const [weeks, setWeeks] = useState(4);
+
+  const extraOrders = Math.round(ordenes * (liftPct / 100));
+  const extraGMV = extraOrders * avgTicket;
+  const comisionExtra = extraGMV * comisionRate;
+  const ingresoNetoExtra = extraGMV - comisionExtra;
+  const costoTotalAds = budget * weeks;
+  const gananciaNetaTotal = (ingresoNetoExtra * weeks) - costoTotalAds;
+  const roi = costoTotalAds > 0 ? ((gananciaNetaTotal / costoTotalAds) * 100) : 0;
+  const paybackWeeks = ingresoNetoExtra > 0 ? budget / ingresoNetoExtra : null;
+  const isPositive = roi > 0;
+
+  const f = (v) => fmt(v, country);
+  const sliderStyle = (color) => ({ width: "100%", accentColor: color, cursor: "pointer" });
+
+  if (!paidlot || ventaBruta === 0) return (
+    <div style={{ textAlign: "center", padding: "48px 24px", color: "#94a3b8" }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 6 }}>Carga un paidlot primero</div>
+      <div style={{ fontSize: 12 }}>El simulador usa los datos reales del aliado para calcular el ROI.</div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      {/* Header */}
+      <div style={{ marginBottom: 20, padding: "14px 18px", background: "linear-gradient(135deg,#fff7ed,#fef3c7)", border: "1.5px solid #fed7aa", borderRadius: 14, display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <span style={{ fontSize: 28, flexShrink: 0 }}>📊</span>
+        <div>
+          <div style={{ fontWeight: 900, fontSize: 14, color: "#92400e", marginBottom: 3 }}>Simulador de ROI — RappiAds</div>
+          <div style={{ fontSize: 12, color: "#78350f", lineHeight: 1.5 }}>
+            Calculado con datos reales de <strong>{paidlot.tienda ?? "este aliado"}</strong>:
+            ticket promedio <strong>{f(avgTicket)}</strong> · {ordenes} órdenes · comisión efectiva <strong>{(comisionRate * 100).toFixed(1)}%</strong>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        {/* Inputs */}
+        <div style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 14, padding: "16px 18px" }}>
+          <div style={{ fontWeight: 800, fontSize: 12, color: "#475569", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.04em" }}>⚙️ Parámetros</div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Inversión semanal en ADS</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "#f97316" }}>{f(budget)}</span>
+            </div>
+            <input type="range" min={Math.round(ventaBruta * 0.005)} max={Math.round(ventaBruta * 0.08)} step={Math.round(ventaBruta * 0.002)}
+              value={budget} onChange={e => setBudget(Number(e.target.value))} style={sliderStyle("#f97316")} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
+              <span>{f(Math.round(ventaBruta * 0.005))}</span><span>{f(Math.round(ventaBruta * 0.08))}</span>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Incremento estimado de órdenes</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "#7c3aed" }}>+{liftPct}%</span>
+            </div>
+            <input type="range" min={5} max={50} step={5}
+              value={liftPct} onChange={e => setLiftPct(Number(e.target.value))} style={sliderStyle("#7c3aed")} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
+              <span>+5% (conservador)</span><span>+50% (optimista)</span>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Duración de la campaña</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "#0ea5e9" }}>{weeks} semanas</span>
+            </div>
+            <input type="range" min={1} max={12} step={1}
+              value={weeks} onChange={e => setWeeks(Number(e.target.value))} style={sliderStyle("#0ea5e9")} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
+              <span>1 sem</span><span>12 sem</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ROI output */}
+        <div style={{ background: isPositive ? "linear-gradient(135deg,#f0fdf4,#dcfce7)" : "linear-gradient(135deg,#fef2f2,#fee2e2)", border: `2px solid ${isPositive ? "#86efac" : "#fca5a5"}`, borderRadius: 14, padding: "16px 18px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: isPositive ? "#15803d" : "#dc2626", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>ROI proyectado ({weeks} semanas)</div>
+          <div style={{ fontSize: 52, fontWeight: 900, color: isPositive ? "#16a34a" : "#ef4444", lineHeight: 1, marginBottom: 4 }}>
+            {roi > 0 ? "+" : ""}{roi.toFixed(0)}%
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isPositive ? "#166534" : "#7f1d1d", marginBottom: 12 }}>
+            {isPositive ? `Ganancia neta estimada: ${f(gananciaNetaTotal)}` : `Pérdida estimada: ${f(gananciaNetaTotal)}`}
+          </div>
+          {paybackWeeks !== null && isPositive && (
+            <div style={{ fontSize: 11, background: "white", borderRadius: 20, padding: "4px 12px", color: "#166534", fontWeight: 700 }}>
+              ⏱ Recupera inversión en ~{paybackWeeks.toFixed(1)} semanas
+            </div>
+          )}
+          {!isPositive && (
+            <div style={{ fontSize: 11, background: "white", borderRadius: 20, padding: "4px 12px", color: "#dc2626", fontWeight: 700 }}>
+              ⚠ Reducir presupuesto o aumentar el lift esperado
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Breakdown table */}
+      <div style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: 14, overflow: "hidden", marginBottom: 16 }}>
+        <div style={{ background: "#f1f5f9", padding: "10px 16px", fontWeight: 800, fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>📋 Desglose semanal</div>
+        {[
+          { label: "Órdenes adicionales estimadas", value: `+${extraOrders} órdenes`, color: "#7c3aed" },
+          { label: "GMV adicional estimado", value: f(extraGMV), color: "#22c55e" },
+          { label: "Comisión sobre ventas adicionales", value: `− ${f(comisionExtra)}`, color: "#ef4444" },
+          { label: "Ingreso neto adicional", value: f(ingresoNetoExtra), color: "#16a34a" },
+          { label: "Costo semanal RappiAds", value: `− ${f(budget)}`, color: "#f97316" },
+          { label: "Ganancia neta semanal", value: f(ingresoNetoExtra - budget), color: ingresoNetoExtra - budget >= 0 ? "#16a34a" : "#ef4444", bold: true },
+        ].map((row, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "9px 16px", borderTop: i === 0 ? "none" : "1px solid #f1f5f9", background: row.bold ? "#fafafa" : "white" }}>
+            <span style={{ fontSize: 12, color: "#374151", fontWeight: row.bold ? 700 : 400 }}>{row.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: row.color }}>{row.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Disclaimer */}
+      <div style={{ padding: "10px 14px", background: "#fafafa", border: "1px solid #e2e8f0", borderRadius: 10, fontSize: 10, color: "#94a3b8", lineHeight: 1.6 }}>
+        ⚠ <strong>Estimación referencial</strong> — Los resultados reales dependen del tipo de campaña, categoría, competencia, estacionalidad y configuración del ADS. El incremento de órdenes asumido ({liftPct}%) es un benchmark de la industria ajustable. Consultar con el equipo de RappiAds para proyecciones oficiales.
+      </div>
+    </div>
+  );
+});
+
+// ── KnowledgeCenterModal — 9 tabs: 6 edu + PAGOS + SIMULADOR + OBJECIONES ────
+const KC_TABS = [...EDUCATION_TABS, "PAGOS", "SIMULADOR", "OBJECIONES"];
+const KC_ICONS = { DAR:"🎯", ADS:"📺", IMPUESTOS:"🧾", COMPENSACIONES:"🔄", CONCEPTOS:"📖", "FÓRMULAS":"🔢", PAGOS:"💳", SIMULADOR:"📊", OBJECIONES:"⚡" };
 
 const PAGOS_FAQ = [
   { q: "¿Cuándo me pagan? ¿Cuáles son los períodos de pago?", a: "Rappi tiene diferentes frecuencias de pago según el contrato del aliado:\n\n• **Semanal** — el período cierra el domingo a medianoche. El paidlot se genera el lunes y el depósito llega en 1–3 días hábiles.\n• **Quincenal** — cierres el día 15 y el último día del mes.\n• **Mensual** — cierre el último día del mes.\n\nLa fecha exacta de depósito aparece en el campo 'Fecha de Pago' en el encabezado de tu paidlot." },
@@ -3152,12 +3290,12 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
           {/* Tab strip */}
           <div style={{ display: "flex", gap: 0, overflowX: "auto" }}>
             {KC_TABS.map(t => {
-              const isSpecial = t === "OBJECIONES";
+              const tabColor = t === "OBJECIONES" ? "#f97316" : t === "SIMULADOR" ? "#d97706" : "#ff441f";
               return (
                 <button key={t} onClick={() => setTab(t)}
-                  style={{ padding: "9px 14px", border: "none", borderBottom: tab === t ? `2.5px solid ${isSpecial ? "#f97316" : "#ff441f"}` : "2.5px solid transparent",
+                  style={{ padding: "9px 14px", border: "none", borderBottom: tab === t ? `2.5px solid ${tabColor}` : "2.5px solid transparent",
                     background: "none", cursor: "pointer", fontSize: 11, fontWeight: tab === t ? 800 : 500,
-                    color: tab === t ? (isSpecial ? "#f97316" : "#ff441f") : "#64748b",
+                    color: tab === t ? tabColor : "#64748b",
                     whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
                   <span>{KC_ICONS[t]}</span>{t}
                 </button>
@@ -3193,6 +3331,11 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
 
           {/* Pagos FAQ */}
           {tab === "PAGOS" && <PagosPanel search={search} />}
+
+          {/* Simulador ROI */}
+          {tab === "SIMULADOR" && (
+            <AdsROICalculator paidlot={paidlot} country={country} />
+          )}
 
           {/* Objeciones */}
           {tab === "OBJECIONES" && (
