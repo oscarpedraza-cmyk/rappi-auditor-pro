@@ -8,6 +8,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from "react";
 import * as XLSX from "xlsx";
+import { GoogleLogin } from "@react-oauth/google";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // § 0. SERVICE LAYER  (pure functions — no React, fully testable in isolation)
@@ -3455,7 +3456,101 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// § 10. MAIN APP
+// § 10. AUTH
+// ─────────────────────────────────────────────────────────────────────────────
+
+const AUTH_DOMAIN  = "rappi.com";
+const LS_AUTH_KEY  = "rappi_auth_v1";
+const AUTH_TTL_MS  = 8 * 60 * 60 * 1000; // 8 horas
+
+const parseJwt = (token) => {
+  try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); }
+  catch { return null; }
+};
+
+const LoginScreen = ({ onLogin }) => {
+  const [error, setError] = useState("");
+  const clientReady = !!(import.meta.env.VITE_GOOGLE_CLIENT_ID);
+
+  const handleSuccess = ({ credential }) => {
+    const payload = parseJwt(credential);
+    if (!payload) { setError("Error al leer las credenciales. Intenta de nuevo."); return; }
+    const email = payload.email ?? "";
+    if (!email.endsWith("@" + AUTH_DOMAIN)) {
+      setError(`Solo se permiten cuentas @${AUTH_DOMAIN}. Cuenta detectada: ${email}`);
+      return;
+    }
+    const user = { email, name: payload.name ?? email, picture: payload.picture ?? "", exp: Date.now() + AUTH_TTL_MS };
+    localStorage.setItem(LS_AUTH_KEY, JSON.stringify(user));
+    onLogin(user);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(150deg,#ff441f 0%,#ff6b47 55%,#ff9a7a 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ background: "white", borderRadius: 24, padding: "44px 40px 36px", maxWidth: 420, width: "100%", boxShadow: "0 40px 100px rgba(0,0,0,0.28)", textAlign: "center", animation: "fadeIn 0.3s ease" }}>
+        {/* Logo */}
+        <div style={{ width: 76, height: 76, borderRadius: 20, background: "linear-gradient(135deg,#ff441f,#ff6b47)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", boxShadow: "0 8px 24px rgba(255,68,31,0.4)" }}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" width="44" height="44">
+            <rect x="9" y="5" width="22" height="31" rx="2.5" fill="white"/>
+            <path d="M25 5 L31 11 H25 V5Z" fill="rgba(255,255,255,0.6)"/>
+            <rect x="12" y="15" width="14" height="2" rx="1" fill="rgba(255,68,31,0.8)"/>
+            <rect x="12" y="19" width="11" height="1.5" rx="0.75" fill="rgba(255,255,255,0.6)"/>
+            <rect x="12" y="22" width="13" height="1.5" rx="0.75" fill="rgba(255,255,255,0.6)"/>
+            <rect x="12" y="25" width="9" height="1.5" rx="0.75" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="37" cy="37" r="8" fill="#fbbf24"/>
+            <text x="37" y="41.5" textAnchor="middle" fontFamily="Arial Black,Arial,sans-serif" fontWeight="900" fontSize="10" fill="white">$</text>
+          </svg>
+        </div>
+
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: "0 0 6px", lineHeight: 1.15 }}>Rappi Paidlot Auditor</h1>
+        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 26, lineHeight: 1.55 }}>
+          Herramienta interna de análisis de paidlots<br />para el equipo comercial de Rappi
+        </p>
+
+        {/* Access badge */}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fef3c7", border: "1.5px solid #fde68a", borderRadius: 20, padding: "5px 16px", marginBottom: 26 }}>
+          <span style={{ fontSize: 14 }}>🔒</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#92400e" }}>Acceso exclusivo: @rappi.com</span>
+        </div>
+
+        {clientReady ? (
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: error ? 16 : 0 }}>
+            <GoogleLogin
+              onSuccess={handleSuccess}
+              onError={() => setError("Error al iniciar sesión con Google. Intenta de nuevo.")}
+              useOneTap={false}
+              theme="outline"
+              size="large"
+              text="signin_with"
+              locale="es"
+              shape="rectangular"
+            />
+          </div>
+        ) : (
+          <div style={{ background: "#fef2f2", border: "1.5px solid #fecaca", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+            <div style={{ fontWeight: 800, fontSize: 12, color: "#dc2626", marginBottom: 4 }}>⚠️ Client ID no configurado</div>
+            <div style={{ fontSize: 11, color: "#7f1d1d", lineHeight: 1.5 }}>
+              Configura la variable <code style={{ background: "#fee2e2", padding: "1px 5px", borderRadius: 4 }}>VITE_GOOGLE_CLIENT_ID</code> en Render → Environment.
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div style={{ background: "#fef2f2", border: "1.5px solid #fecaca", borderRadius: 12, padding: "10px 14px", marginTop: 14 }}>
+            <div style={{ fontSize: 12, color: "#dc2626", fontWeight: 700 }}>⛔ {error}</div>
+          </div>
+        )}
+
+        <p style={{ fontSize: 10, color: "#cbd5e1", marginTop: 22, lineHeight: 1.5 }}>
+          La sesión expira automáticamente a las 8 horas.<br />Solo cuentas Google con dominio @rappi.com pueden acceder.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// § 11. MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Limpieza mensual del historial de chat (día 30 de cada mes)
@@ -3474,6 +3569,20 @@ function runMonthlyChatCleanup() {
 }
 
 export default function RappiPaidlotAuditorPro() {
+  // ── Auth gate ────────────────────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_AUTH_KEY) ?? "null");
+      if (saved && saved.exp > Date.now()) return saved;
+      if (saved) localStorage.removeItem(LS_AUTH_KEY);
+      return null;
+    } catch { return null; }
+  });
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem(LS_AUTH_KEY);
+    setAuthUser(null);
+  }, []);
+
   const [paidlots, setPaidlots] = useState(() => { runMonthlyChatCleanup(); return loadPaidlots(); });
   const [activeIdx, setActiveIdx] = useState(0);
   const [selected, setSelected] = useState(new Set());
@@ -3656,6 +3765,9 @@ export default function RappiPaidlotAuditorPro() {
 
   const COUNTRY_LIST = Object.keys(CONFIG.countries);
 
+  // ── Auth gate — show login screen if not authenticated ──────────────────
+  if (!authUser) return <LoginScreen onLogin={setAuthUser} />;
+
   return (
     <div style={{ minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: "#0f172a" }}>
 
@@ -3699,6 +3811,15 @@ export default function RappiPaidlotAuditorPro() {
             <input type="file" accept=".xlsx,.xls" onChange={handleFiles} multiple style={{ display: "none" }} />
           </label>
 
+          {/* User badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 20, padding: "4px 10px 4px 6px" }}>
+            {authUser.picture
+              ? <img src={authUser.picture} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              : <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#ff441f,#ff6b47)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 900, fontSize: 11, flexShrink: 0 }}>{authUser.name?.[0] ?? "R"}</div>
+            }
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{authUser.name?.split(" ")[0]}</span>
+            <button onClick={handleLogout} title="Cerrar sesión" style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", display: "flex", alignItems: "center" }}>⏏</button>
+          </div>
         </div>
       </header>
 
