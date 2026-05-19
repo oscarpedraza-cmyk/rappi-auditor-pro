@@ -4339,6 +4339,11 @@ export default function RappiPaidlotAuditorPro() {
           onHighlightTab={handleHighlightSection}
         />
       )}
+
+      {/* Footer */}
+      <div style={{ textAlign: "center", padding: "14px 0 18px", fontSize: 10, color: "#cbd5e1", borderTop: "1px solid #f1f5f9", marginTop: 8 }}>
+        Desarrollado por <strong style={{ color: "#94a3b8" }}>Oscar Pedraza</strong> · Rappi Commercial Team Lead 2026
+      </div>
     </div>
   );
 }
