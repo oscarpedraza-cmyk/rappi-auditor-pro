@@ -2619,6 +2619,7 @@ ${ajustesText||"Sin ajustes."}`;
 
       setAiLog(prev => [...prev, { q, a: text, ts: new Date().toLocaleTimeString() }]); addToHistory(q, text);
       logQueryToSheets({ aliado: paidlot.meta.tienda, pais: country, pregunta: q, respuesta: text });
+      try { const _au = JSON.parse(localStorage.getItem(LS_AUTH_KEY) ?? "null"); trackEvent(_au?.email ?? "", _au?.name ?? "", "consulta_ia"); } catch {}
 
     } catch (err) {
       console.error("[Gemini]", err);
@@ -3462,6 +3463,19 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
 const AUTH_DOMAIN  = "rappi.com";
 const LS_AUTH_KEY  = "rappi_auth_v1";
 const AUTH_TTL_MS  = 8 * 60 * 60 * 1000; // 8 horas
+const TRACKER_URL  = "https://script.google.com/a/macros/rappi.com/s/AKfycbx6LZTNTR-l_XPbh-07s6WX-t627oNJZTBUgb7hw9XIAsGuIMdsOP8gpwNTvKJdCcDm/exec";
+
+// Fire-and-forget — nunca bloquea la UI
+function trackEvent(email, name, action) {
+  try {
+    fetch(TRACKER_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, action }),
+    }).catch(() => {});
+  } catch {}
+}
 
 const parseJwt = (token) => {
   try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); }
@@ -3482,6 +3496,7 @@ const LoginScreen = ({ onLogin }) => {
     }
     const user = { email, name: payload.name ?? email, picture: payload.picture ?? "", exp: Date.now() + AUTH_TTL_MS };
     localStorage.setItem(LS_AUTH_KEY, JSON.stringify(user));
+    trackEvent(user.email, user.name, "login");
     onLogin(user);
   };
 
@@ -3649,6 +3664,7 @@ export default function RappiPaidlotAuditorPro() {
       setPaidlots(prev => [...prev, ...newPaidlots]);
       setActiveIdx(startIdx + newPaidlots.length - 1);
       setActiveGroupKey(null); setActiveTab("ordenes");
+      trackEvent(authUser?.email ?? "", authUser?.name ?? "", "paidlot_cargado");
       const ambiguous = newPaidlots.findIndex(p => p.detection.confidence === "low");
       if (ambiguous >= 0) { setTempCountry(newPaidlots[ambiguous].detection.country); setCountryModal({ idx: startIdx + ambiguous }); }
     }
