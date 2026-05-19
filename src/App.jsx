@@ -3463,7 +3463,7 @@ const KnowledgeCenterModal = memo(({ country, topKpis, paidlot, allPaidlots, onC
 const AUTH_DOMAIN  = "rappi.com";
 const LS_AUTH_KEY  = "rappi_auth_v1";
 const AUTH_TTL_MS  = 8 * 60 * 60 * 1000; // 8 horas
-const TRACKER_URL  = "https://script.google.com/a/macros/rappi.com/s/AKfycbx6LZTNTR-l_XPbh-07s6WX-t627oNJZTBUgb7hw9XIAsGuIMdsOP8gpwNTvKJdCcDm/exec";
+const TRACKER_URL  = "https://script.google.com/macros/s/AKfycbx6LZTNTR-l_XPbh-07s6WX-t627oNJZTBUgb7hw9XIAsGuIMdsOP8gpwNTvKJdCcDm/exec";
 
 // Fire-and-forget — nunca bloquea la UI
 // Usa URLSearchParams (application/x-www-form-urlencoded) porque no-cors
