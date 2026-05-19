@@ -3514,14 +3514,18 @@ const LoginScreen = ({ onLogin }) => {
         </div>
 
         {clientReady ? (
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: error ? 16 : 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: error ? 16 : 0 }}>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 2 }}>
+              Usará la cuenta Google vinculada a tu navegador
+            </div>
             <GoogleLogin
               onSuccess={handleSuccess}
               onError={() => setError("Error al iniciar sesión con Google. Intenta de nuevo.")}
-              useOneTap={false}
+              useOneTap={true}
+              auto_select={true}
               theme="outline"
               size="large"
-              text="signin_with"
+              text="continue_with"
               locale="es"
               shape="rectangular"
             />
