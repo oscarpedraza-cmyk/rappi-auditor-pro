@@ -2453,12 +2453,22 @@ const DoubtAssistant = memo(({ paidlot, country, allPaidlots, onHighlightSection
       `  ${e.ordenId}|${e.fecha}|${e.tipo}|${fmt(e.ventaBruta, cty)}`
     ).join("\n");
 
-    return `Eres un asesor comercial y contable de Rappi, especializado en ayudar a los aliados (restaurantes y tiendas) a entender y optimizar sus liquidaciones de pago (paidlots). Tu rol es:
+    return `Eres un asesor comercial y contable de Rappi, especializado en ayudar a farmers (ejecutivos comerciales) a entender los paidlots de sus aliados (restaurantes y tiendas). Tu rol es:
 - NUNCA sugerir vacíos legales, evasión fiscal, ni formas de reducir pagos al margen de la ley.
-- SIEMPRE orientar al aliado hacia soluciones legales: certificados de exención vigentes, correcta categorización fiscal, deducciones legalmente aplicables, revisión de contratos y tarifas con su ejecutivo de cuenta.
-- SIEMPRE destacar el valor de RappiAds como herramienta que el aliado puede activar para mejorar su visibilidad y ventas.
-- NO decirle al aliado que puede "activar DAR" o "invertir en DAR" — el DAR es una inversión que Rappi decide según sus criterios internos de coinversión, no algo que el aliado activa por voluntad propia. Si el aliado pregunta por DAR, explicar que es un programa de inversión de Rappi y que deben conversarlo con su ejecutivo de cuenta.
-- Responder en español, con tono positivo, empático y orientado a soluciones. Máximo 3 párrafos, sin tecnicismos. Usa los datos del paidlot para personalizar la respuesta.
+- SIEMPRE orientar hacia soluciones legales: certificados de exención vigentes, correcta categorización fiscal, deducciones legalmente aplicables, revisión de contratos y tarifas con el ejecutivo de cuenta.
+- SIEMPRE destacar el valor de RappiAds como herramienta de crecimiento para el aliado.
+- NO decirle al aliado que puede "activar DAR" o "invertir en DAR" — el DAR es una inversión que Rappi decide internamente.
+- Si la pregunta es vaga o incompleta, NO respondas con generalidades. En su lugar, haz UNA pregunta concreta y específica para entender mejor qué necesita el farmer (ej: "¿El aliado pregunta por un monto específico o por el concepto general de impuestos?").
+
+FORMATO DE RESPUESTA OBLIGATORIO — siempre usa exactamente estas 3 secciones:
+🔍 QUÉ ENCONTRÉ: [explica qué dato o situación detectaste en el paidlot, con cifras concretas]
+💬 CÓMO EXPLICÁRSELO AL ALIADO: [frase clara, en lenguaje simple, sin tecnicismos, que el farmer puede usar directamente]
+✅ PRÓXIMO PASO: [acción concreta y específica que el farmer debe tomar]
+
+Si la consulta es vaga, responde solo con:
+❓ NECESITO MÁS DETALLE: [tu pregunta específica para afinar la consulta]
+
+Responde en español. Usa los datos reales del paidlot. Sé conciso y directo.
 
 PAIDLOT: ${p.meta.tienda} | ${country} | ${p.resumen.inicio}→${p.resumen.fin}
 KPIs: VentaBruta=${fmt(kpi.ventaBruta,cty)} | TotalPagar=${fmt(kpi.totalAPagar??kpi.neto,cty)} | Comision=${fmt(kpi.comision,cty)} | Impuestos=${fmt(kpi.impuestosTotalExacto??kpi.totalImpuestos??0,cty)} | TarifaEfectiva=${fmtPct(kpi.effectiveFee)} | DAR=${kpi.hasDar?"SI "+fmt(kpi.darInversionTotal,cty):"NO"} | ADS=${fmt(kpi.cuotaRappiAds??0,cty)} | ADSvencida=${fmt(kpi.rappiAdsCollection??0,cty)} | Compensaciones=${fmt(kpi.compensaciones,cty)} | Ajustes=${fmt(kpi.ajustesTotal,cty)} | Ordenes=${kpi.ordenes}
@@ -2912,7 +2922,7 @@ ${ajustesText||"Sin ajustes."}`;
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder='Ej: "El aliado pregunta por qué le descontaron $200 el 13 de abril en impuestos"...'
+                  placeholder='Ej: "El aliado pregunta por qué le descontaron $200 en impuestos el 13 de abril" · "¿Por qué el pago fue menor al esperado?" · "El aliado no entiende el cobro de ADS"'
                   rows={3}
                   style={{ width: "100%", padding: "12px 50px 12px 14px", borderRadius: 12, border: "1.5px solid #e2e8f0", fontSize: 13, lineHeight: 1.5, resize: "none", outline: "none", fontFamily: "inherit", color: "#0f172a", background: "#ffffff", boxSizing: "border-box", transition: "border-color 0.15s" }}
                   onFocus={e => e.target.style.borderColor = "#ff441f"}
@@ -2996,10 +3006,30 @@ ${ajustesText||"Sin ajustes."}`;
                       <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase" }}>Análisis del paidlot</span>
                       {localResolved && <span style={{ fontSize: 10, fontWeight: 700, background: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: 20 }}>⚡ Local — sin IA</span>}
                     </div>
-                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "14px 16px" }}>
-                      {result.split("\n").map((line, i) => (
-                        <p key={i} style={{ fontSize: 13, color: "#1e293b", lineHeight: 1.65, margin: "0 0 6px" }}>{line || " "}</p>
-                      ))}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {result.split("\n").filter(l => l.trim()).map((line, i) => {
+                        const isFound    = line.startsWith("🔍");
+                        const isExplain  = line.startsWith("💬");
+                        const isNext     = line.startsWith("✅");
+                        const isQuestion = line.startsWith("❓");
+                        const isSection  = isFound || isExplain || isNext || isQuestion;
+                        const sectionStyle = isFound    ? { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" }
+                                           : isExplain  ? { bg: "#f0fdf4", border: "#86efac", color: "#166534" }
+                                           : isNext     ? { bg: "#faf5ff", border: "#d8b4fe", color: "#7c3aed" }
+                                           : isQuestion ? { bg: "#fffbeb", border: "#fde68a", color: "#92400e" }
+                                           : null;
+                        if (isSection && sectionStyle) {
+                          const [label, ...rest] = line.split(": ");
+                          const body = rest.join(": ");
+                          return (
+                            <div key={i} style={{ background: sectionStyle.bg, border: `1.5px solid ${sectionStyle.border}`, borderRadius: 10, padding: "10px 14px" }}>
+                              <div style={{ fontSize: 11, fontWeight: 800, color: sectionStyle.color, marginBottom: body ? 4 : 0, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
+                              {body && <div style={{ fontSize: 13, color: "#1e293b", lineHeight: 1.65 }}>{body}</div>}
+                            </div>
+                          );
+                        }
+                        return <p key={i} style={{ fontSize: 13, color: "#1e293b", lineHeight: 1.65, margin: 0, padding: "0 2px" }}>{line}</p>;
+                      })}
                     </div>
                   </div>
                 )}
