@@ -4200,7 +4200,7 @@ export default function RappiPaidlotAuditorPro() {
                           <div style={{ marginTop: 8, padding: "10px 14px", background: bg, borderRadius: 10, border: `1.5px solid ${border}`, fontSize: 12, color: text, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                             <div>
                               <strong>📺 RappiAds:</strong> Cuota {fmt(p.topKpis.cuotaRappiAds, activeCountry)}
-                              {baseVentas > 0 && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: "white", padding: "1px 8px", borderRadius: 20, border: `1px solid ${border}` }}>{(adsPct*100).toFixed(1)}% de ventas</span>}
+                              {baseAds > 0 && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: "white", padding: "1px 8px", borderRadius: 20, border: `1px solid ${border}` }}>{(adsPct*100).toFixed(1)}% de ventas</span>}
                               {alertLevel !== "purple" && <span style={{ marginLeft: 6, fontSize: 10, color: text }}> — inversión alta</span>}
                             </div>
                             <button onClick={() => setAdsModal(true)} style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", background: "white", border: `1px solid ${border}`, borderRadius: 20, cursor: "pointer", color: text, whiteSpace: "nowrap" }}>Ver análisis →</button>
@@ -4372,14 +4372,14 @@ export default function RappiPaidlotAuditorPro() {
                 <div style={{ fontSize: 36, fontWeight: 900, color }}>{(adsPct * 100).toFixed(1)}%</div>
                 <div style={{ fontSize: 12, color, fontWeight: 700, marginTop: 4 }}>de las ventas facturadas se destina a RappiAds</div>
                 <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
-                  {fmt(kpi.cuotaRappiAds, activeCountry)} de {fmt(baseVentas, activeCountry)} ventas facturadas
+                  {fmt(kpi.cuotaRappiAds, activeCountry)} de {fmt(baseAds, activeCountry)} ventas facturadas
                 </div>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
                 {[
                   { label: "Cuota RappiAds", val: fmt(kpi.cuotaRappiAds, activeCountry), color: "#7c3aed" },
-                  { label: "Ventas Facturadas", val: fmt(baseVentas, activeCountry), color: "#10b981" },
+                  { label: "Ventas Facturadas", val: fmt(baseAds, activeCountry), color: "#10b981" },
                   { label: "% invertido en ADS", val: `${(adsPct*100).toFixed(2)}%`, color },
                   ...(kpi.rappiAdsCollection > 0 ? [{ label: "Cobro ADS semana vencida", val: fmt(kpi.rappiAdsCollection, activeCountry), color: "#f59e0b" }] : []),
                 ].map(row => (
