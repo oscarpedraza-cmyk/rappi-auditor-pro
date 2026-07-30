@@ -500,6 +500,23 @@ function parseWorkbook(wb, countryOverride = null) {
     }
     return null;
   };
+  // findLabelGetD: finds exact label in ANY column, forces col D (idx 3) as value.
+  // Primary extractor for "Valor total a transferir" — covers layouts where label is not in col C.
+  const findLabelGetD = (label) => {
+    const lLow = label.toLowerCase().trim();
+    for (const row of rsMatrix) {
+      for (let c = 0; c < row.length; c++) {
+        if (String(row[c] ?? "").trim().toLowerCase() === lLow) {
+          const colD = row[3];
+          if (colD !== null && colD !== "" && colD !== undefined && cleanNum(colD) !== 0) return colD;
+          for (let i = c + 1; i < row.length; i++) {
+            if (row[i] !== null && row[i] !== "" && row[i] !== undefined && cleanNum(row[i]) !== 0) return row[i];
+          }
+        }
+      }
+    }
+    return null;
+  };
 
   // Dates: D4 = row-index 3 col D (idx 3), D5 = row-index 4 col D — primary for real paidlots
   const inicioRaw =
@@ -511,8 +528,9 @@ function parseWorkbook(wb, countryOverride = null) {
     findRS("Fin Período de venta") ?? findRS("Fin Periodo de venta") ??
     findRS("Fin Período") ?? findRS("Fin periodo") ?? "—";
 
-  // Total declarado: column C/D scan is primary; other strategies are fallbacks
+  // Total declarado: findLabelGetD is primary (any-column exact match → col D forced)
   const totalDeclaradoRaw =
+    findLabelGetD("Valor total a transferir") ??
     findColCD("Valor total a transferir") ??
     findRS("Valor total a transferir") ??
     findRS("Total a transferir") ??
@@ -585,9 +603,17 @@ function parseWorkbook(wb, countryOverride = null) {
   const DAR_COL = "Descuentos por inversión de Rappi DAR";
   const DAR_COMP_COL = "Descuento por inversión de Rappi  a aplicar sobre Uso y alquiler de plataforma Rappi DAR";
   const DAR_IVA_COL = "Descuento por inversión de Rappi a aplicar sobre el IVA Uso y alquiler de plataforma Rappi DAR";
-  const totalDARInversion = Math.abs(colTotals[DAR_COL] ?? 0);
-  const totalDARComision = Math.abs(colTotals[DAR_COMP_COL] ?? 0);
-  const totalDARIVA = Math.abs(colTotals[DAR_IVA_COL] ?? 0);
+  // Slug-based DAR lookup: tolerates whitespace/accent variants in column names across paidlot formats
+  const findDARTotal = (key) => {
+    const exact = colTotals[key];
+    if (exact !== undefined) return Math.abs(exact);
+    const s = slugify(key);
+    const found = Object.keys(colTotals).find(k => slugify(k) === s);
+    return found ? Math.abs(colTotals[found]) : 0;
+  };
+  const totalDARInversion = findDARTotal(DAR_COL);
+  const totalDARComision = findDARTotal(DAR_COMP_COL);
+  const totalDARIVA = findDARTotal(DAR_IVA_COL);
   const totalDARBeneficio = totalDARInversion + totalDARComision + totalDARIVA;
   const hasDar = totalDARInversion > 0;
 
@@ -826,7 +852,7 @@ function exportPDF(paidlot, country, aiInsights = "", allSelected = []) {
   const darCfg        = DAR_CONFIG[country]        ?? DAR_CONFIG["No detectado"];
   const taxCfg        = COUNTRY_TAX_DETAIL[country] ?? COUNTRY_TAX_DETAIL["No detectado"];
   const taxRows       = (kpi.impuestosPorRegla ?? []).filter(r => r.value > 0);
-  const pdfSafe = (s) => String(s ?? "").replace(/[^ -ÿ]/g, "").replace(/\s+/g, " ").trim();
+  const pdfSafe = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim();
 
   // ── Recomendaciones de Facturación (data-driven) ─────────────────────────
   const recosFact = [];
@@ -1554,23 +1580,23 @@ const DarKpiPanel = memo(({ kpis, country }) => {
 });
 
 // ── AdsAlertBanner — shown when Ads/totalAPagar > 20% ────────────────────────
-const AdsAlertBanner = memo(({ kpis, country }) => {
-  const baseVentas = kpis.ventaBruta;
-  if (!kpis.cuotaRappiAds || baseVentas <= 0) return null;
-  const pct = kpis.cuotaRappiAds / baseVentas;
-  if (pct <= 0.10) return null;
+const AdsAlertBanner = memo(({ kpis, country, totalAPagar }) => {
+  const base = totalAPagar > 0 ? totalAPagar : kpis.ventaBruta;
+  if (!kpis.cuotaRappiAds || base <= 0) return null;
+  const pct = kpis.cuotaRappiAds / base;
+  if (pct <= 0.20) return null;
   return (
     <div style={{ background: "linear-gradient(135deg,#fff7ed,#fef2f2)", border: "2.5px solid #f97316", borderRadius: 16, padding: "16px 20px", marginBottom: 16, display: "flex", gap: 14, alignItems: "flex-start", animation: "fadeIn 0.3s ease" }}>
       <span style={{ fontSize: 28, flexShrink: 0 }}>⚠️</span>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 900, color: "#c2410c", fontSize: 15, marginBottom: 5 }}>
-          Alerta de Pauta: La inversión en Ads representa el {(pct * 100).toFixed(1)}% de las ventas facturadas
+          Alerta de Pauta: La inversión en Ads representa el {(pct * 100).toFixed(1)}% del Total a Pagar
         </div>
         <div style={{ fontSize: 13, color: "#9a3412", lineHeight: 1.65 }}>
-          La <strong>Cuota de RappiAds</strong> ({fmt(kpis.cuotaRappiAds, country)}) supera el 10% de las <strong>Ventas Facturadas</strong> ({fmt(baseVentas, country)}). Esto podría comprometer el flujo de caja del aliado. Evalúa si el retorno de la inversión ADS justifica este nivel de pauta, o ajusta el presupuesto publicitario para el próximo período.
+          La <strong>Cuota de RappiAds</strong> ({fmt(kpis.cuotaRappiAds, country)}) supera el 20% del <strong>Total a Pagar</strong> ({fmt(base, country)}). Esto compromete el flujo de caja del aliado. Evalúa urgentemente el ROI de la pauta o ajusta el presupuesto publicitario para el próximo período.
         </div>
       </div>
-      <div style={{ background: "#f97316", color: "white", borderRadius: 12, padding: "6px 14px", fontSize: 13, fontWeight: 900, whiteSpace: "nowrap", alignSelf: "center" }}>
+      <div style={{ background: "#dc2626", color: "white", borderRadius: 12, padding: "6px 14px", fontSize: 13, fontWeight: 900, whiteSpace: "nowrap", alignSelf: "center" }}>
         {(pct * 100).toFixed(1)}% ADS
       </div>
     </div>
@@ -2900,7 +2926,7 @@ ${ajustesText||"Sin ajustes."}`;
                         href={"https://www.google.com/search?q=" + encodeURIComponent("normativa fiscal Rappi aliados " + country + " " + externalTerm)}
                         target="_blank" rel="noreferrer"
                         style={{ fontSize: 11, fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 20, padding: "3px 10px", textDecoration: "none" }}
-                      >🔍 Investigar base legal</a>
+                      >🔍 Investigar normativa en Google</a>
                     )}
                     {aiLog.length > 0 && (
                       <button
@@ -3064,7 +3090,7 @@ ${ajustesText||"Sin ajustes."}`;
                       <a href={"https://www.google.com/search?q=" + encodeURIComponent("normativa fiscal Rappi aliados " + country + " " + externalTerm)}
                         target="_blank" rel="noreferrer"
                         style={{ fontSize: 11, fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 20, padding: "3px 10px", textDecoration: "none" }}>
-                        🔍 Investigar base legal
+                        🔍 Investigar normativa en Google
                       </a>
                     )}
                     {aiLog.length > 0 && (
@@ -4135,8 +4161,8 @@ export default function RappiPaidlotAuditorPro() {
                         </div>
                       ))}
                       {p.topKpis.cuotaRappiAds > 0 && (() => {
-                        const baseVentas = p.topKpis.ventaBruta;
-                        const adsPct = baseVentas > 0 ? p.topKpis.cuotaRappiAds / baseVentas : 0;
+                        const baseAds = (p.topKpis.totalAPagar ?? p.topKpis.neto ?? 0) > 0 ? (p.topKpis.totalAPagar ?? p.topKpis.neto) : p.topKpis.ventaBruta;
+                        const adsPct = baseAds > 0 ? p.topKpis.cuotaRappiAds / baseAds : 0;
                         const alertLevel = adsPct > 0.20 ? "red" : adsPct > 0.10 ? "orange" : "purple";
                         const colors = { red: ["#fef2f2","#fca5a5","#dc2626"], orange: ["#fff7ed","#fed7aa","#c2410c"], purple: ["#faf5ff","#d8b4fe","#5b21b6"] };
                         const [bg, border, text] = colors[alertLevel];
@@ -4292,8 +4318,8 @@ export default function RappiPaidlotAuditorPro() {
       {/* RappiAds analysis modal */}
       {adsModal && activePaidlot && (() => {
         const kpi = activePaidlot.topKpis;
-        const baseVentas = kpi.ventaBruta;
-        const adsPct = baseVentas > 0 ? kpi.cuotaRappiAds / baseVentas : 0;
+        const baseAds = (kpi.totalAPagar ?? kpi.neto ?? 0) > 0 ? (kpi.totalAPagar ?? kpi.neto) : kpi.ventaBruta;
+        const adsPct = baseAds > 0 ? kpi.cuotaRappiAds / baseAds : 0;
         const isHigh = adsPct > 0.20;
         const isMed = adsPct > 0.10;
         const color = isHigh ? "#dc2626" : isMed ? "#c2410c" : "#5b21b6";
