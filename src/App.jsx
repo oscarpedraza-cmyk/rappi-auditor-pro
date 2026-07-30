@@ -586,6 +586,14 @@ function parseWorkbook(wb, countryOverride = null) {
       .reduce((sum, [, val]) => sum + val, 0);
   }
 
+  // Detect formula cache staleness: Resumen SUM formulas cached as 0 because
+  // the Detalle sheet uses deflate64 compression that SheetJS cannot decompress.
+  // Symptom: totalDeclarado=0 AND shadowTotal=0 AND very few Detalle rows readable.
+  const formulaCacheIssue =
+    Math.abs(resumen.totalDeclarado) <= 0.01 &&
+    Math.abs(shadowTotal) <= 0.01 &&
+    detMatrix.length <= 3;
+
   const shadowRounded = round2(shadowTotal), declaredRounded = round2(resumen.totalDeclarado);
   const reconciliationDiff = round2(shadowRounded - declaredRounded);
   const reconciliationOk = declaredRounded === 0 || Math.abs(reconciliationDiff) < 0.02;
@@ -735,7 +743,7 @@ function parseWorkbook(wb, countryOverride = null) {
     resumen, meta, detection, groups, ordersTable,
     compRows: compRows.length > 0 ? compRows : compDetRows.map(r => ({ orderId: safeId(getCol(r, "ID de la órden", "ID de la orden")), fecha: fmtDate(getCol(r, "Fecha de creación orden")), razon: "—", monto: Math.abs(cleanNum(getCol(r, "Compensaciones"))), productos: "—", comentario: "—" })),
     extrasTable, ajustesRows, topKpis, colTotals,
-    shadowTotal: shadowRounded,
+    shadowTotal: shadowRounded, formulaCacheIssue,
     reconciliation: { declared: declaredRounded, shadow: shadowRounded, diff: reconciliationDiff, ok: reconciliationOk },
     conciliationService: buildConciliation(
       { ventaBruta: ventaBrutaTotal, comision: comisionBase, totalImpuestos: totalImpuestos, ajustesTotal: Math.abs(colTotals["Valor Ajustes Manuales"] ?? 0) + Math.abs(colTotals["Deuda Periodos Anteriores"] ?? 0), darBeneficioTotal: totalDARBeneficio, compensaciones: Math.abs(colTotals["Compensaciones"] ?? 0) },
@@ -1574,6 +1582,27 @@ const DarKpiPanel = memo(({ kpis, country }) => {
             <div style={{ fontSize: 15, fontWeight: 800, color: "#c2410c" }}>{k.val}</div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+});
+
+// ── FormulaCacheWarning — shown when Detalle can't be decompressed ───────────
+const FormulaCacheWarning = memo(({ show }) => {
+  if (!show) return null;
+  return (
+    <div style={{ background: "linear-gradient(135deg,#eff6ff,#dbeafe)", border: "2.5px solid #3b82f6", borderRadius: 16, padding: "16px 20px", marginBottom: 16, display: "flex", gap: 14, alignItems: "flex-start" }}>
+      <span style={{ fontSize: 28, flexShrink: 0 }}>⚠️</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: "#1e40af", marginBottom: 4 }}>
+          Caché de fórmulas desactualizada — Total a Pagar muestra $0.00
+        </div>
+        <div style={{ fontSize: 13, color: "#1e3a8a", lineHeight: 1.5 }}>
+          Este archivo tiene las fórmulas del Resumen sin recalcular. Excel guardó el resultado anterior (0) en lugar del valor real porque usa un formato de compresión que el lector no puede descomprimir.
+        </div>
+        <div style={{ marginTop: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #bfdbfe", fontSize: 13, color: "#1e40af", fontWeight: 600 }}>
+          Solución: Abre el archivo en Excel → guarda con Ctrl+S → vuelve a subirlo. El Total a Pagar aparecerá correctamente.
+        </div>
       </div>
     </div>
   );
@@ -3989,6 +4018,7 @@ export default function RappiPaidlotAuditorPro() {
 
               {/* ── Alerts ── */}
               <div style={{ marginTop: 10 }}>
+                <FormulaCacheWarning show={p.formulaCacheIssue} />
                 <AutoAlertsBanner kpi={p.topKpis} country={activeCountry} />
                 <DarZeroAlert kpis={p.topKpis} tienda={p.meta.tienda} />
                 <DarKpiPanel kpis={p.topKpis} country={activeCountry} />
