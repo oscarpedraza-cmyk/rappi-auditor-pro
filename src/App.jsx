@@ -21,6 +21,7 @@ const KPI_CONFIG = [
   { key: "darInversionTotal",   label: "Descuentos asumidos por Rappi",                   icon: "🎯", color: "#f97316" },
   { key: "descuentosVenta",     label: "Descuentos sobre la venta",                       icon: "🔄", color: "#8b5cf6" },
   { key: "comision",            label: "Uso y alquiler de plataforma Rappi y tasas Rappi",icon: "🏢", color: "#ef4444" },
+  { key: "comisionPct",         label: "Tasa de comisión contractual",                    icon: "📊", color: "#ef4444" },
   { key: "impuestosTotalExacto",label: "Impuestos",                                       icon: "🧾", color: "#0ea5e9", scrollTo: "section-impuestos" },
   { key: "totalAPagar",         label: "Total a Pagar",                                   icon: "✅", color: "#f59e0b" },
   { key: "otrosDescuentos",     label: "Otros Descuentos",                                icon: "📋", color: "#475569" },
@@ -679,6 +680,18 @@ function parseWorkbook(wb, countryOverride = null) {
     : (Math.abs(colTotals["IVA Uso y alquiler de plataforma Rappi"] ?? 0) + Math.abs(colTotals["Reteiva Uso y alquiler de plataforma Rappi"] ?? 0) + Math.abs(colTotals["IVA Campañas"] ?? 0) + Math.abs(colTotals["ReteICA Uso y alquiler de plataforma Rappi"] ?? 0) + Math.abs(colTotals["ISR"] ?? 0));
   const ventaBrutaTotal = Math.abs(colTotals["Venta Bruta"] ?? 0);
 
+  // comisionPct — representative commission rate from column "Porcentaje de Uso y alquiler de plataforma Rappi"
+  // Weighted average across orders with ventaBruta > 0 and pctComision > 0.
+  // Normalizes: values >1 are stored as whole-number % (e.g. 15 → 0.15).
+  const validCommRows = ordersTable.filter(r => r.pctComision > 0 && r.ventaBruta > 0);
+  let comisionPct = 0;
+  if (validCommRows.length > 0) {
+    const wSum = validCommRows.reduce((s, r) => s + r.pctComision * r.ventaBruta, 0);
+    const vSum = validCommRows.reduce((s, r) => s + r.ventaBruta, 0);
+    const raw = vSum > 0 ? wSum / vSum : validCommRows[0].pctComision;
+    comisionPct = raw > 1 ? raw / 100 : raw;  // normalize whole-number format
+  }
+
   // Run service layer: exact-column tax matching via TAX_RULES
   const serviceKpis = processPaidlot(colTotals, detection.country);
 
@@ -728,6 +741,7 @@ function parseWorkbook(wb, countryOverride = null) {
     darIvaTotal: totalDARIVA,
     darBeneficioTotal: totalDARBeneficio,
     hasDar,
+    comisionPct,
     darPctSobreVentas: ventaBrutaTotal > 0 ? totalDARInversion / ventaBrutaTotal : 0,
     rappiAdsCollection: Math.abs(colTotals["Descuento rappi_ads_invoiced_collection"] ?? 0),
     cuotaRappiAds: Math.abs(colTotals["Cuota de RappiAds"] ?? 0),
@@ -1417,8 +1431,9 @@ const KPIGrid = memo(({ topKpis, country, onSelectKpi, selectedKpi, compact = fa
     {KPI_CONFIG.map(k => {
       const rawVal = topKpis[k.key] ?? 0;
       const isEffective = k.key === "effectiveFee";
-      const displayVal = isEffective
-        ? fmtPct(rawVal)
+      const isPct = isEffective || k.key === "comisionPct";
+      const displayVal = isPct
+        ? (rawVal > 0 ? fmtPct(rawVal) : "—")
         : fmt(rawVal, country);
       const dynamicColor = isEffective
         ? (rawVal > 0.35 ? "#f97316" : "#10b981")
@@ -1471,7 +1486,8 @@ const KPIPanel = memo(({ topKpis, country, onSelectKpi, selectedKpi }) => (
       {KPI_CONFIG.map((k) => {
         const rawVal = topKpis[k.key] ?? 0;
         const isEffective = k.key === "effectiveFee";
-        const displayVal = isEffective ? fmtPct(rawVal) : fmt(rawVal, country);
+        const isPct = isEffective || k.key === "comisionPct";
+        const displayVal = isPct ? (rawVal > 0 ? fmtPct(rawVal) : "—") : fmt(rawVal, country);
         const dynamicColor = isEffective ? (rawVal > 0.35 ? "#f97316" : "#10b981") : k.color;
         const isSelected = selectedKpi === k.key;
         const isAlert = isEffective && rawVal > 0.35;
@@ -4065,7 +4081,25 @@ export default function RappiPaidlotAuditorPro() {
                 </div>
                 {!p.topKpis.hasDar
                   ? <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 16px", fontSize: 12, color: "#dc2626" }}>Sin inversión DAR activa en este período.</div>
-                  : <div style={{ maxHeight: 300, overflowY: "auto", overflowX: "auto", borderRadius: 12 }}><DarOrderTable ordersTable={p.ordersTable} country={activeCountry} hasDar={p.topKpis.hasDar} /></div>
+                  : <>
+                    {/* Desglose por componente — siempre visible */}
+                    <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                      {[
+                        { label: "DAR Producto", val: p.topKpis.darInversionProducto, tip: "Descuento sobre la venta bruta asumido por Rappi" },
+                        { label: "DAR Comisión", val: p.topKpis.darComisionTotal,     tip: "Descuento sobre la comisión de plataforma" },
+                        { label: "DAR IVA",      val: p.topKpis.darIvaTotal,          tip: "Descuento sobre el IVA de la comisión" },
+                      ].filter(d => d.val > 0).map(d => (
+                        <div key={d.label} title={d.tip} style={{ flex: "1 1 120px", background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 10, padding: "10px 14px" }}>
+                          <div style={{ fontSize: 10, color: "#92400e", fontWeight: 700, marginBottom: 3 }}>{d.label}</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#c2410c" }}>{fmt(d.val, activeCountry)}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Tabla por orden si hay desglose individual */}
+                    <div style={{ maxHeight: 300, overflowY: "auto", overflowX: "auto", borderRadius: 12 }}>
+                      <DarOrderTable ordersTable={p.ordersTable} country={activeCountry} hasDar={p.topKpis.hasDar} />
+                    </div>
+                  </>
                 }
               </div>
 
