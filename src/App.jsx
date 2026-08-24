@@ -2660,7 +2660,7 @@ ${ajustesText||"Sin ajustes."}`;
             "Authorization": `Bearer ${groqKey}`,
           },
           body: JSON.stringify({
-            model: "llama-3.1-8b-instant",
+            model: "llama3-8b-8192",
             messages: [
               { role: "system", content: context },
               { role: "user", content: q },
