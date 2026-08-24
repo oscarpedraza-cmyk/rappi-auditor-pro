@@ -1949,6 +1949,7 @@ const EducationHub = memo(({ country, topKpis, embedded = false, embeddedTab = "
           { term:"Venta Bruta", def:"Ventas sin descuento. Valor total de productos antes de cualquier deducción." },
           { term:"Descuento de Producto asumido por el aliado", def:"Descuento que el aliado financia sobre sus propios productos (markdowns, promos del aliado)." },
           { term:"Descuento en créditos", def:"Descuentos pagados con Rappi Créditos asumidos por el aliado (campo vfdPartner en PP)." },
+          { term:"RappiCréditos promocionales → DAR", def:"Cuando un usuario paga con créditos que Rappi emitió (cashback, referidos, promos), esa orden aparece en el paidlot con Venta Bruta completa y un DAR equivalente al valor de los créditos. Rappi financia el 100% → el aliado recibe su pago íntegro. Distinto a cuando el usuario compró sus créditos con dinero real: en ese caso no genera DAR." },
           { term:"Ventas base por Uso y alquiler de plataforma Rappi", def:"Base para cálculo de fee = Venta Bruta − Descuentos del aliado. Informativo." },
           { term:"Uso y alquiler de plataforma Rappi", def:"Comisión Rappi. Costo de uso de plataforma = Ventas base × % comisión del contrato." },
           { term:"Tarifa Transaccional", def:"Fee adicional por pagos con tarjeta de crédito/débito. Reason 6 o R9 según tipo." },
