@@ -24,7 +24,9 @@ const KPI_CONFIG = [
   { key: "comisionPct",         label: "Tasa de comisión contractual",                    icon: "📊", color: "#ef4444" },
   { key: "impuestosTotalExacto",label: "Impuestos",                                       icon: "🧾", color: "#0ea5e9", scrollTo: "section-impuestos" },
   { key: "totalAPagar",         label: "Total a Pagar",                                   icon: "✅", color: "#f59e0b" },
+  { key: "gastoBancarioTotal",   label: "Gasto Bancario",                                  icon: "🏦", color: "#6366f1" },
   { key: "otrosDescuentos",     label: "Otros Descuentos",                                icon: "📋", color: "#475569" },
+  { key: "ajustesTotal",        label: "Ajustes y Deudas",                                icon: "⚖️", color: "#64748b" },
   { key: "prestamos",           label: "Prestamos",                                       icon: "🏦", color: "#0f172a" },
 ];
 
@@ -713,14 +715,18 @@ function parseWorkbook(wb, countryOverride = null) {
       Math.abs(colTotals["Total pagado por el Usuario al Aliado (marketplace)"] ?? 0) +
       Math.abs(colTotals["Descuento por Domicilio gratis"] ?? 0)
     ),
-    // KPI: Otros Descuentos = cashbacks + challenges + gasto bancario
-    otrosDescuentos: round2(
-      Math.abs(colTotals["Cashback en Rappi creditos asumido por el aliado"] ?? 0) +
-      Math.abs(colTotals["Challenge Rappi créditos asumidos por el aliado"] ?? 0) +
-      Math.abs(colTotals["Cashback 15 mis o gratis"] ?? 0) +
+    // KPI: Gasto Bancario — tarifa de transferencia + IVA + Retefuente (fila tipo GASTO BANCARIO)
+    gastoBancarioTotal: round2(
       Math.abs(colTotals["Gasto bancario"] ?? 0) +
       Math.abs(colTotals["IVA Gasto Bancario"] ?? 0) +
-      Math.abs(colTotals["Retefuente Gasto Bancario"] ?? 0)
+      Math.abs(colTotals["Retefuente Gasto Bancario\t"] ?? colTotals["Retefuente Gasto Bancario"] ?? 0)
+    ),
+    // KPI: Otros Descuentos = cashbacks + challenges (sin gasto bancario, que tiene su propio card)
+    otrosDescuentos: round2(
+      Math.abs(colTotals["Cashback en Rappi creditos asumido por el aliado"] ?? 0) +
+      Math.abs(colTotals["Cashback en Créditos de Rappi asumido por el aliado"] ?? 0) +
+      Math.abs(colTotals["Challenge Rappi créditos asumidos por el aliado"] ?? 0) +
+      Math.abs(colTotals["Cashback 15 mis o gratis"] ?? 0)
     ),
     // KPI: Préstamos = cuota de préstamo
     prestamos: round2(
