@@ -389,11 +389,9 @@ export const CONFIG = {
       tooltip: "Cashbacks asumidos por el aliado, desafíos de créditos Rappi y otros descuentos sobre la facturación.",
       cols: [
         "Cashback en Rappi creditos asumido por el aliado",
+        "Cashback en Créditos de Rappi asumido por el aliado",
         "Challenge Rappi créditos asumidos por el aliado",
         "Cashback 15 mis o gratis",
-        "Gasto bancario",
-        "IVA Gasto Bancario",
-        "Retefuente Gasto Bancario",
       ],
     },
     {
@@ -716,10 +714,11 @@ function parseWorkbook(wb, countryOverride = null) {
       Math.abs(colTotals["Descuento por Domicilio gratis"] ?? 0)
     ),
     // KPI: Gasto Bancario — tarifa de transferencia + IVA + Retefuente (fila tipo GASTO BANCARIO)
+    // Usa findDARTotal (slug-based) para tolerar variantes de mayúsculas/espacios entre archivos
     gastoBancarioTotal: round2(
-      Math.abs(colTotals["Gasto bancario"] ?? 0) +
-      Math.abs(colTotals["IVA Gasto Bancario"] ?? 0) +
-      Math.abs(colTotals["Retefuente Gasto Bancario\t"] ?? colTotals["Retefuente Gasto Bancario"] ?? 0)
+      findDARTotal("Gasto bancario") +
+      findDARTotal("IVA Gasto Bancario") +
+      findDARTotal("Retefuente Gasto Bancario")
     ),
     // KPI: Otros Descuentos = cashbacks + challenges (sin gasto bancario, que tiene su propio card)
     otrosDescuentos: round2(
