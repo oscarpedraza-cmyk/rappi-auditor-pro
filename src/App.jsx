@@ -26,7 +26,7 @@ const KPI_CONFIG = [
   { key: "totalAPagar",         label: "Total a Pagar",                                   icon: "✅", color: "#f59e0b" },
   { key: "gastoBancarioTotal",   label: "Gasto Bancario",                                  icon: "🏦", color: "#6366f1" },
   { key: "otrosDescuentos",     label: "Otros Descuentos",                                icon: "📋", color: "#475569" },
-  { key: "ajustesTotal",        label: "Ajustes y Deudas",                                icon: "⚖️", color: "#64748b" },
+  { key: "ajustesTotal",        label: "Ajustes y Deudas",                                icon: "⚖️", color: "#64748b", negative: true },
   { key: "prestamos",           label: "Prestamos",                                       icon: "🏦", color: "#0f172a" },
 ];
 
@@ -1439,7 +1439,7 @@ const KPIGrid = memo(({ topKpis, country, onSelectKpi, selectedKpi, compact = fa
       const isPct = isEffective || k.key === "comisionPct";
       const displayVal = isPct
         ? (rawVal > 0 ? fmtPct(rawVal) : "—")
-        : fmt(rawVal, country);
+        : (k.negative && rawVal > 0 ? `−${fmt(rawVal, country)}` : fmt(rawVal, country));
       const dynamicColor = isEffective
         ? (rawVal > 0.35 ? "#f97316" : "#10b981")
         : k.color;
@@ -1492,7 +1492,7 @@ const KPIPanel = memo(({ topKpis, country, onSelectKpi, selectedKpi }) => (
         const rawVal = topKpis[k.key] ?? 0;
         const isEffective = k.key === "effectiveFee";
         const isPct = isEffective || k.key === "comisionPct";
-        const displayVal = isPct ? (rawVal > 0 ? fmtPct(rawVal) : "—") : fmt(rawVal, country);
+        const displayVal = isPct ? (rawVal > 0 ? fmtPct(rawVal) : "—") : (k.negative && rawVal > 0 ? `−${fmt(rawVal, country)}` : fmt(rawVal, country));
         const dynamicColor = isEffective ? (rawVal > 0.35 ? "#f97316" : "#10b981") : k.color;
         const isSelected = selectedKpi === k.key;
         const isAlert = isEffective && rawVal > 0.35;
