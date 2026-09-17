@@ -340,6 +340,7 @@ export const CONFIG = {
       tooltip: "Comisión de plataforma + tarifas de servicio + inversión publicitaria RappiAds. Es el costo principal del aliado por operar en Rappi.",
       cols: [
         "Uso y alquiler de plataforma Rappi",
+        "Uso y alquiler de plataforma Rappi para órdenes Pro",
         "Descuento por inversión de Rappi a aplicar sobre Uso y alquiler de plataforma Rappi DAR",
         "Descuento por Service Fee",
         "Prime Uso y alquiler de plataforma Rappi",
@@ -670,7 +671,8 @@ function parseWorkbook(wb, countryOverride = null) {
   }).filter(g => g.total > 0.005);
 
   // comisionTotal = full platform group sum (base + ads + tarifas)
-  const comisionBase = Math.abs(colTotals["Uso y alquiler de plataforma Rappi"] ?? 0);
+  const comisionBase = Math.abs(colTotals["Uso y alquiler de plataforma Rappi"] ?? 0)
+    + Math.abs(colTotals["Uso y alquiler de plataforma Rappi para órdenes Pro"] ?? 0);
   const plataformaGroup = groups.find(g => g.key === "plataforma");
   const comisionTotal = plataformaGroup ? plataformaGroup.total : comisionBase;
   // totalImpuestos = full impuestos group sum (all items, same pattern as comisionTotal)
